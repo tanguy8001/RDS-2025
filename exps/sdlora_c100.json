@@ -16,14 +16,21 @@
     "tuned_epoch": 20,
     "filepath": "./CF100/",
     "init_epoch": 20,
-    "init_lr": 8e-3,  
+    "init_lr": 8e-3,
     "init_milestones": [60, 120, 170],
     "init_lr_decay": 0.1,
     "init_weight_decay": 0.0005,
     "epochs": 20,
     "lrate": 8e-3,
     "milestones": [40, 70],
-    "lrate_decay": 0, 
+    "lrate_decay": 0,
     "batch_size": 128,
-    "weight_decay": 2e-4
+    "weight_decay": 2e-4,
+
+    "_comment_gumbel": "Gumbel CL-LoRA hyperparameters",
+    "gumbel_tau_init": 5.0,
+    "gumbel_tau_final": 0.5,
+    "gumbel_anneal_rate": 0.999,
+    "lambda_sparsity": 0.001,
+    "growth_threshold": 0.1
 }

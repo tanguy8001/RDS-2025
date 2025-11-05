@@ -1,0 +1,323 @@
+no change     /cluster/home/tdieudonne/miniconda3/condabin/conda
+no change     /cluster/home/tdieudonne/miniconda3/bin/conda
+no change     /cluster/home/tdieudonne/miniconda3/bin/conda-env
+no change     /cluster/home/tdieudonne/miniconda3/bin/activate
+no change     /cluster/home/tdieudonne/miniconda3/bin/deactivate
+no change     /cluster/home/tdieudonne/miniconda3/etc/profile.d/conda.sh
+no change     /cluster/home/tdieudonne/miniconda3/etc/fish/conf.d/conda.fish
+no change     /cluster/home/tdieudonne/miniconda3/shell/condabin/Conda.psm1
+no change     /cluster/home/tdieudonne/miniconda3/shell/condabin/conda-hook.ps1
+no change     /cluster/home/tdieudonne/miniconda3/lib/python3.13/site-packages/xontrib/conda.xsh
+no change     /cluster/home/tdieudonne/miniconda3/etc/profile.d/conda.csh
+no change     /cluster/home/tdieudonne/.bashrc
+No action taken.
+Many modules are hidden in this stack. Use "module --show_hidden spider SOFTWARE" if you are not able to find the required software
+seed [1993]
+devices_type ['0']
+2025-11-05 17:59:54,164 [trainer.py] => config: ./exps/sdlora_c100.json
+2025-11-05 17:59:54,164 [trainer.py] => seed: 1993
+2025-11-05 17:59:54,164 [trainer.py] => prefix: reproduce
+2025-11-05 17:59:54,164 [trainer.py] => dataset: cifar224
+2025-11-05 17:59:54,164 [trainer.py] => memory_size: 0
+2025-11-05 17:59:54,164 [trainer.py] => memory_per_class: 0
+2025-11-05 17:59:54,164 [trainer.py] => fixed_memory: False
+2025-11-05 17:59:54,165 [trainer.py] => shuffle: True
+2025-11-05 17:59:54,165 [trainer.py] => init_cls: 10
+2025-11-05 17:59:54,165 [trainer.py] => increment: 10
+2025-11-05 17:59:54,165 [trainer.py] => model_name: sdlora
+2025-11-05 17:59:54,165 [trainer.py] => backbone_type: vit_base_patch16_224
+2025-11-05 17:59:54,165 [trainer.py] => device: [device(type='cuda', index=0)]
+2025-11-05 17:59:54,165 [trainer.py] => scheduler: cosine
+2025-11-05 17:59:54,165 [trainer.py] => min_lr: 0.005
+2025-11-05 17:59:54,165 [trainer.py] => tuned_epoch: 20
+2025-11-05 17:59:54,165 [trainer.py] => filepath: ./CF100/
+2025-11-05 17:59:54,165 [trainer.py] => init_epoch: 20
+2025-11-05 17:59:54,165 [trainer.py] => init_lr: 0.008
+2025-11-05 17:59:54,165 [trainer.py] => init_milestones: [60, 120, 170]
+2025-11-05 17:59:54,165 [trainer.py] => init_lr_decay: 0.1
+2025-11-05 17:59:54,166 [trainer.py] => init_weight_decay: 0.0005
+2025-11-05 17:59:54,166 [trainer.py] => epochs: 1
+2025-11-05 17:59:54,166 [trainer.py] => lrate: 0.008
+2025-11-05 17:59:54,166 [trainer.py] => milestones: [40, 70]
+2025-11-05 17:59:54,166 [trainer.py] => lrate_decay: 0
+2025-11-05 17:59:54,166 [trainer.py] => batch_size: 128
+2025-11-05 17:59:54,166 [trainer.py] => weight_decay: 0.0002
+2025-11-05 17:59:54,166 [trainer.py] => _comment_gumbel: Gumbel CL-LoRA hyperparameters
+2025-11-05 17:59:54,166 [trainer.py] => gumbel_tau_init: 5.0
+2025-11-05 17:59:54,166 [trainer.py] => gumbel_tau_final: 0.5
+2025-11-05 17:59:54,166 [trainer.py] => gumbel_anneal_rate: 0.999
+2025-11-05 17:59:54,166 [trainer.py] => lambda_sparsity: 0.01
+2025-11-05 17:59:54,166 [trainer.py] => growth_threshold: 0.1
+Files already downloaded and verified
+Files already downloaded and verified
+2025-11-05 17:59:55,448 [data_manager.py] => [68, 56, 78, 8, 23, 84, 90, 65, 74, 76, 40, 89, 3, 92, 55, 9, 26, 80, 43, 38, 58, 70, 77, 1, 85, 19, 17, 50, 28, 53, 13, 81, 45, 82, 6, 59, 83, 16, 15, 44, 91, 41, 72, 60, 79, 52, 20, 10, 31, 54, 37, 95, 14, 71, 96, 98, 97, 2, 64, 66, 42, 22, 35, 86, 24, 34, 87, 21, 99, 0, 88, 27, 18, 94, 11, 12, 47, 25, 30, 46, 62, 69, 36, 61, 7, 63, 75, 5, 32, 4, 51, 48, 73, 93, 39, 67, 29, 49, 57, 33]
+!!!!!!! multiple_gpus [device(type='cuda', index=0)]
+This is for the BaseNet initialization.
+2025-11-05 17:59:58,452 [_builder.py] => Loading pretrained weights from Hugging Face hub (timm/vit_base_patch16_224.augreg2_in21k_ft_in1k)
+2025-11-05 17:59:58,618 [_hub.py] => [timm/vit_base_patch16_224.augreg2_in21k_ft_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+save_file ./CF100/
+Initialize task-id and curtask id
+After BaseNet initialization.
+task 0
+2025-11-05 17:59:59,028 [trainer.py] => All params: 171965992
+2025-11-05 17:59:59,029 [trainer.py] => Trainable params: 368680
+2025-11-05 17:59:59,029 [sdlora.py] => Learning on 0-10
+/cluster/home/tdieudonne/miniconda3/envs/rds/lib/python3.10/site-packages/torch/utils/data/dataloader.py:557: UserWarning: This DataLoader will create 8 worker processes in total. Our suggested max number of worker in current system is 6, which is smaller than what this DataLoader is going to create. Please be aware that excessive worker creation might get DataLoader running slow or even freeze, lower the worker number to avoid potential slowness/freeze if necessary.
+  warnings.warn(_create_warning_msg(
+  0%|          | 0/20 [00:00<?, ?it/s]Task 0, Epoch 1/20 => Loss 0.815, Train_accy 74.18, Test_accy 95.00:   0%|          | 0/20 [00:32<?, ?it/s]Task 0, Epoch 1/20 => Loss 0.815, Train_accy 74.18, Test_accy 95.00:   5%|▌         | 1/20 [00:32<10:24, 32.88s/it]Task 0, Epoch 2/20 => Loss 0.400, Train_accy 88.20:   5%|▌         | 1/20 [00:59<10:24, 32.88s/it]                 Task 0, Epoch 2/20 => Loss 0.400, Train_accy 88.20:  10%|█         | 2/20 [00:59<08:44, 29.16s/it]Task 0, Epoch 3/20 => Loss 0.363, Train_accy 89.06:  10%|█         | 2/20 [01:26<08:44, 29.16s/it]Task 0, Epoch 3/20 => Loss 0.363, Train_accy 89.06:  15%|█▌        | 3/20 [01:26<07:56, 28.05s/it]Task 0, Epoch 4/20 => Loss 0.284, Train_accy 91.14:  15%|█▌        | 3/20 [01:52<07:56, 28.05s/it]Task 0, Epoch 4/20 => Loss 0.284, Train_accy 91.14:  20%|██        | 4/20 [01:52<07:20, 27.53s/it]Task 0, Epoch 5/20 => Loss 0.248, Train_accy 92.22:  20%|██        | 4/20 [02:19<07:20, 27.53s/it]Task 0, Epoch 5/20 => Loss 0.248, Train_accy 92.22:  25%|██▌       | 5/20 [02:19<06:49, 27.29s/it]Task 0, Epoch 6/20 => Loss 0.251, Train_accy 92.32, Test_accy 98.40:  25%|██▌       | 5/20 [02:49<06:49, 27.29s/it]Task 0, Epoch 6/20 => Loss 0.251, Train_accy 92.32, Test_accy 98.40:  30%|███       | 6/20 [02:49<06:35, 28.24s/it]Task 0, Epoch 7/20 => Loss 0.247, Train_accy 92.18:  30%|███       | 6/20 [03:16<06:35, 28.24s/it]                 Task 0, Epoch 7/20 => Loss 0.247, Train_accy 92.18:  35%|███▌      | 7/20 [03:16<06:00, 27.75s/it]Task 0, Epoch 8/20 => Loss 0.251, Train_accy 92.28:  35%|███▌      | 7/20 [03:43<06:00, 27.75s/it]Task 0, Epoch 8/20 => Loss 0.251, Train_accy 92.28:  40%|████      | 8/20 [03:43<05:29, 27.43s/it]Task 0, Epoch 9/20 => Loss 0.240, Train_accy 92.36:  40%|████      | 8/20 [04:10<05:29, 27.43s/it]Task 0, Epoch 9/20 => Loss 0.240, Train_accy 92.36:  45%|████▌     | 9/20 [04:10<04:59, 27.23s/it]Task 0, Epoch 10/20 => Loss 0.215, Train_accy 93.22:  45%|████▌     | 9/20 [04:36<04:59, 27.23s/it]Task 0, Epoch 10/20 => Loss 0.215, Train_accy 93.22:  50%|█████     | 10/20 [04:36<04:30, 27.08s/it]Task 0, Epoch 11/20 => Loss 0.209, Train_accy 92.92, Test_accy 98.80:  50%|█████     | 10/20 [05:07<04:30, 27.08s/it]Task 0, Epoch 11/20 => Loss 0.209, Train_accy 92.92, Test_accy 98.80:  55%|█████▌    | 11/20 [05:07<04:12, 28.06s/it]Task 0, Epoch 12/20 => Loss 0.213, Train_accy 93.08:  55%|█████▌    | 11/20 [05:34<04:12, 28.06s/it]                 Task 0, Epoch 12/20 => Loss 0.213, Train_accy 93.08:  60%|██████    | 12/20 [05:34<03:41, 27.71s/it]Task 0, Epoch 13/20 => Loss 0.221, Train_accy 92.92:  60%|██████    | 12/20 [06:01<03:41, 27.71s/it]Task 0, Epoch 13/20 => Loss 0.221, Train_accy 92.92:  65%|██████▌   | 13/20 [06:01<03:12, 27.53s/it]Task 0, Epoch 14/20 => Loss 0.200, Train_accy 93.42:  65%|██████▌   | 13/20 [06:28<03:12, 27.53s/it]Task 0, Epoch 14/20 => Loss 0.200, Train_accy 93.42:  70%|███████   | 14/20 [06:28<02:44, 27.41s/it]Task 0, Epoch 15/20 => Loss 0.197, Train_accy 93.58:  70%|███████   | 14/20 [06:55<02:44, 27.41s/it]Task 0, Epoch 15/20 => Loss 0.197, Train_accy 93.58:  75%|███████▌  | 15/20 [06:55<02:16, 27.35s/it]Task 0, Epoch 16/20 => Loss 0.183, Train_accy 93.84, Test_accy 98.80:  75%|███████▌  | 15/20 [07:26<02:16, 27.35s/it]Task 0, Epoch 16/20 => Loss 0.183, Train_accy 93.84, Test_accy 98.80:  80%|████████  | 16/20 [07:26<01:53, 28.32s/it]Task 0, Epoch 17/20 => Loss 0.213, Train_accy 93.46:  80%|████████  | 16/20 [07:53<01:53, 28.32s/it]                 Task 0, Epoch 17/20 => Loss 0.213, Train_accy 93.46:  85%|████████▌ | 17/20 [07:53<01:23, 27.98s/it]Task 0, Epoch 18/20 => Loss 0.192, Train_accy 93.92:  85%|████████▌ | 17/20 [08:20<01:23, 27.98s/it]Task 0, Epoch 18/20 => Loss 0.192, Train_accy 93.92:  90%|█████████ | 18/20 [08:20<00:55, 27.69s/it]Task 0, Epoch 19/20 => Loss 0.199, Train_accy 93.52:  90%|█████████ | 18/20 [08:47<00:55, 27.69s/it]Task 0, Epoch 19/20 => Loss 0.199, Train_accy 93.52:  95%|█████████▌| 19/20 [08:47<00:27, 27.57s/it]Task 0, Epoch 20/20 => Loss 0.181, Train_accy 94.16:  95%|█████████▌| 19/20 [09:14<00:27, 27.57s/it]Task 0, Epoch 20/20 => Loss 0.181, Train_accy 94.16: 100%|██████████| 20/20 [09:14<00:00, 27.45s/it]Task 0, Epoch 20/20 => Loss 0.181, Train_accy 94.16: 100%|██████████| 20/20 [09:14<00:00, 27.74s/it]
+2025-11-05 18:09:13,873 [sdlora.py] => Task 0, Epoch 20/20 => Loss 0.181, Train_accy 94.16
+2025-11-05 18:09:17,423 [trainer.py] => No NME accuracy.
+2025-11-05 18:09:17,424 [trainer.py] => CNN: {'total': np.float64(99.0), '00-09': np.float64(99.0), 'old': 0, 'new': np.float64(99.0)}
+2025-11-05 18:09:17,424 [trainer.py] => CNN top1 curve: [np.float64(99.0)]
+2025-11-05 18:09:17,424 [trainer.py] => CNN top5 curve: [np.float64(100.0)]
+
+Average Accuracy (CNN): 99.0
+2025-11-05 18:09:17,424 [trainer.py] => Average Accuracy (CNN): 99.0 
+
+task 1
+2025-11-05 18:09:17,425 [trainer.py] => All params: 171973682
+2025-11-05 18:09:17,426 [trainer.py] => Trainable params: 376370
+2025-11-05 18:09:17,427 [sdlora.py] => Learning on 10-20
+2025-11-05 18:09:18,247 [_builder.py] => Loading pretrained weights from Hugging Face hub (timm/vit_base_patch16_224.augreg2_in21k_ft_in1k)
+2025-11-05 18:09:18,476 [_hub.py] => [timm/vit_base_patch16_224.augreg2_in21k_ft_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+/cluster/home/tdieudonne/SD-Lora-CL/backbone/lora.py:515: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  saved_lora_A['saved_A_'+str(i)] = torch.load(file_path)
+/cluster/home/tdieudonne/SD-Lora-CL/backbone/lora.py:517: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  saved_lora_B['saved_B_'+str(i)] = torch.load(file_path)
+save_file ./CF100/
+2025-11-05 18:09:18,658 [sdlora.py] => [Gumbel CL-LoRA] tau_init=5.0, tau_final=0.5, anneal_rate=0.999, lambda_sparsity=0.01
+  0%|          | 0/1 [00:00<?, ?it/s]/cluster/home/tdieudonne/SD-Lora-CL/backbone/lora.py:633: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  w_As = torch.load(file_path)
+Task 1, Epoch 1/1 => Loss 0.739 (clf=0.739, sparse=0.0000), tau=4.828, Train_accy 61.70, Test_accy 94.85:   0%|          | 0/1 [00:35<?, ?it/s]Task 1, Epoch 1/1 => Loss 0.739 (clf=0.739, sparse=0.0000), tau=4.828, Train_accy 61.70, Test_accy 94.85: 100%|██████████| 1/1 [00:35<00:00, 35.36s/it]Task 1, Epoch 1/1 => Loss 0.739 (clf=0.739, sparse=0.0000), tau=4.828, Train_accy 61.70, Test_accy 94.85: 100%|██████████| 1/1 [00:35<00:00, 35.36s/it]
+2025-11-05 18:09:54,022 [sdlora.py] => Task 1, Epoch 1/1 => Loss 0.739 (clf=0.739, sparse=0.0000), tau=4.828, Train_accy 61.70, Test_accy 94.85
+2025-11-05 18:09:54,025 [sdlora.py] => 
+[Conditional Growth] Task 1 - Beta values: [0.5 0.5]
+2025-11-05 18:09:54,025 [sdlora.py] => [Conditional Growth] Current task beta: 0.5000, threshold: 0.1
+[GumbelGate] Keeping task 1 (beta above threshold)
+2025-11-05 18:09:54,025 [sdlora.py] => [Conditional Growth] ✓ Keeping adapter for task 1 (beta=0.5000 > 0.1)
+2025-11-05 18:09:54,028 [sdlora.py] => [Conditional Growth] Active adapters: 2/2 (100.0%)
+2025-11-05 18:09:54,037 [sdlora.py] => [Conditional Growth] Beta values saved to ./CF100/beta_values_task_1.pt
+2025-11-05 18:10:00,547 [trainer.py] => No NME accuracy.
+2025-11-05 18:10:00,547 [trainer.py] => CNN: {'total': np.float64(94.85), '00-09': np.float64(95.8), '10-19': np.float64(93.9), 'old': np.float64(95.8), 'new': np.float64(93.9)}
+2025-11-05 18:10:00,547 [trainer.py] => CNN top1 curve: [np.float64(99.0), np.float64(94.85)]
+2025-11-05 18:10:00,547 [trainer.py] => CNN top5 curve: [np.float64(100.0), np.float64(99.4)]
+
+Average Accuracy (CNN): 96.925
+2025-11-05 18:10:00,547 [trainer.py] => Average Accuracy (CNN): 96.925 
+
+task 2
+2025-11-05 18:10:00,548 [trainer.py] => All params: 171981372
+2025-11-05 18:10:00,549 [trainer.py] => Trainable params: 384060
+2025-11-05 18:10:00,550 [sdlora.py] => Learning on 20-30
+2025-11-05 18:10:01,362 [_builder.py] => Loading pretrained weights from Hugging Face hub (timm/vit_base_patch16_224.augreg2_in21k_ft_in1k)
+2025-11-05 18:10:01,481 [_hub.py] => [timm/vit_base_patch16_224.augreg2_in21k_ft_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+save_file ./CF100/
+2025-11-05 18:10:01,672 [sdlora.py] => [Gumbel CL-LoRA] tau_init=5.0, tau_final=0.5, anneal_rate=0.999, lambda_sparsity=0.01
+  0%|          | 0/1 [00:00<?, ?it/s]Task 2, Epoch 1/1 => Loss 0.671 (clf=0.615, sparse=5.6150), tau=4.828, Train_accy 60.00, Test_accy 92.00:   0%|          | 0/1 [00:39<?, ?it/s]Task 2, Epoch 1/1 => Loss 0.671 (clf=0.615, sparse=5.6150), tau=4.828, Train_accy 60.00, Test_accy 92.00: 100%|██████████| 1/1 [00:39<00:00, 39.44s/it]Task 2, Epoch 1/1 => Loss 0.671 (clf=0.615, sparse=5.6150), tau=4.828, Train_accy 60.00, Test_accy 92.00: 100%|██████████| 1/1 [00:39<00:00, 39.44s/it]
+2025-11-05 18:10:41,117 [sdlora.py] => Task 2, Epoch 1/1 => Loss 0.671 (clf=0.615, sparse=5.6150), tau=4.828, Train_accy 60.00, Test_accy 92.00
+2025-11-05 18:10:41,118 [sdlora.py] => 
+[Conditional Growth] Task 2 - Beta values: [0.414668   0.2519987  0.33333334]
+2025-11-05 18:10:41,118 [sdlora.py] => [Conditional Growth] Current task beta: 0.3333, threshold: 0.1
+[GumbelGate] Keeping task 2 (beta above threshold)
+2025-11-05 18:10:41,118 [sdlora.py] => [Conditional Growth] ✓ Keeping adapter for task 2 (beta=0.3333 > 0.1)
+2025-11-05 18:10:41,118 [sdlora.py] => [Conditional Growth] Active adapters: 3/3 (100.0%)
+2025-11-05 18:10:41,134 [sdlora.py] => [Conditional Growth] Beta values saved to ./CF100/beta_values_task_2.pt
+2025-11-05 18:10:50,248 [trainer.py] => No NME accuracy.
+2025-11-05 18:10:50,248 [trainer.py] => CNN: {'total': np.float64(92.0), '00-09': np.float64(90.2), '10-19': np.float64(90.9), '20-29': np.float64(94.9), 'old': np.float64(90.55), 'new': np.float64(94.9)}
+2025-11-05 18:10:50,248 [trainer.py] => CNN top1 curve: [np.float64(99.0), np.float64(94.85), np.float64(92.0)]
+2025-11-05 18:10:50,248 [trainer.py] => CNN top5 curve: [np.float64(100.0), np.float64(99.4), np.float64(98.97)]
+
+Average Accuracy (CNN): 95.28333333333335
+2025-11-05 18:10:50,248 [trainer.py] => Average Accuracy (CNN): 95.28333333333335 
+
+task 3
+2025-11-05 18:10:50,250 [trainer.py] => All params: 171989062
+2025-11-05 18:10:50,251 [trainer.py] => Trainable params: 391750
+2025-11-05 18:10:50,252 [sdlora.py] => Learning on 30-40
+2025-11-05 18:10:51,044 [_builder.py] => Loading pretrained weights from Hugging Face hub (timm/vit_base_patch16_224.augreg2_in21k_ft_in1k)
+2025-11-05 18:10:51,171 [_hub.py] => [timm/vit_base_patch16_224.augreg2_in21k_ft_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+save_file ./CF100/
+2025-11-05 18:10:51,362 [sdlora.py] => [Gumbel CL-LoRA] tau_init=5.0, tau_final=0.5, anneal_rate=0.999, lambda_sparsity=0.01
+  0%|          | 0/1 [00:00<?, ?it/s]Task 3, Epoch 1/1 => Loss 0.768 (clf=0.698, sparse=7.0000), tau=4.828, Train_accy 47.20, Test_accy 88.48:   0%|          | 0/1 [00:43<?, ?it/s]Task 3, Epoch 1/1 => Loss 0.768 (clf=0.698, sparse=7.0000), tau=4.828, Train_accy 47.20, Test_accy 88.48: 100%|██████████| 1/1 [00:43<00:00, 43.97s/it]Task 3, Epoch 1/1 => Loss 0.768 (clf=0.698, sparse=7.0000), tau=4.828, Train_accy 47.20, Test_accy 88.48: 100%|██████████| 1/1 [00:43<00:00, 43.97s/it]
+2025-11-05 18:11:35,330 [sdlora.py] => Task 3, Epoch 1/1 => Loss 0.768 (clf=0.698, sparse=7.0000), tau=4.828, Train_accy 47.20, Test_accy 88.48
+2025-11-05 18:11:35,331 [sdlora.py] => 
+[Conditional Growth] Task 3 - Beta values: [0.2950798  0.20089872 0.25402147 0.25      ]
+2025-11-05 18:11:35,331 [sdlora.py] => [Conditional Growth] Current task beta: 0.2500, threshold: 0.1
+[GumbelGate] Keeping task 3 (beta above threshold)
+2025-11-05 18:11:35,331 [sdlora.py] => [Conditional Growth] ✓ Keeping adapter for task 3 (beta=0.2500 > 0.1)
+2025-11-05 18:11:35,331 [sdlora.py] => [Conditional Growth] Active adapters: 4/4 (100.0%)
+2025-11-05 18:11:35,342 [sdlora.py] => [Conditional Growth] Beta values saved to ./CF100/beta_values_task_3.pt
+2025-11-05 18:11:47,643 [trainer.py] => No NME accuracy.
+2025-11-05 18:11:47,644 [trainer.py] => CNN: {'total': np.float64(88.48), '00-09': np.float64(85.8), '10-19': np.float64(88.9), '20-29': np.float64(94.6), '30-39': np.float64(84.6), 'old': np.float64(89.77), 'new': np.float64(84.6)}
+2025-11-05 18:11:47,644 [trainer.py] => CNN top1 curve: [np.float64(99.0), np.float64(94.85), np.float64(92.0), np.float64(88.48)]
+2025-11-05 18:11:47,644 [trainer.py] => CNN top5 curve: [np.float64(100.0), np.float64(99.4), np.float64(98.97), np.float64(98.4)]
+
+Average Accuracy (CNN): 93.58250000000001
+2025-11-05 18:11:47,644 [trainer.py] => Average Accuracy (CNN): 93.58250000000001 
+
+task 4
+2025-11-05 18:11:47,646 [trainer.py] => All params: 171996752
+2025-11-05 18:11:47,647 [trainer.py] => Trainable params: 399440
+2025-11-05 18:11:47,649 [sdlora.py] => Learning on 40-50
+2025-11-05 18:11:48,457 [_builder.py] => Loading pretrained weights from Hugging Face hub (timm/vit_base_patch16_224.augreg2_in21k_ft_in1k)
+2025-11-05 18:11:48,579 [_hub.py] => [timm/vit_base_patch16_224.augreg2_in21k_ft_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+save_file ./CF100/
+2025-11-05 18:11:48,778 [sdlora.py] => [Gumbel CL-LoRA] tau_init=5.0, tau_final=0.5, anneal_rate=0.999, lambda_sparsity=0.01
+  0%|          | 0/1 [00:00<?, ?it/s]Task 4, Epoch 1/1 => Loss 0.744 (clf=0.666, sparse=7.7198), tau=4.828, Train_accy 50.52, Test_accy 84.36:   0%|          | 0/1 [00:48<?, ?it/s]Task 4, Epoch 1/1 => Loss 0.744 (clf=0.666, sparse=7.7198), tau=4.828, Train_accy 50.52, Test_accy 84.36: 100%|██████████| 1/1 [00:48<00:00, 48.83s/it]Task 4, Epoch 1/1 => Loss 0.744 (clf=0.666, sparse=7.7198), tau=4.828, Train_accy 50.52, Test_accy 84.36: 100%|██████████| 1/1 [00:48<00:00, 48.83s/it]
+2025-11-05 18:12:37,613 [sdlora.py] => Task 4, Epoch 1/1 => Loss 0.744 (clf=0.666, sparse=7.7198), tau=4.828, Train_accy 50.52, Test_accy 84.36
+2025-11-05 18:12:37,615 [sdlora.py] => 
+[Conditional Growth] Task 4 - Beta values: [0.20926866 0.17160049 0.22543563 0.19369522 0.2       ]
+2025-11-05 18:12:37,615 [sdlora.py] => [Conditional Growth] Current task beta: 0.2000, threshold: 0.1
+[GumbelGate] Keeping task 4 (beta above threshold)
+2025-11-05 18:12:37,615 [sdlora.py] => [Conditional Growth] ✓ Keeping adapter for task 4 (beta=0.2000 > 0.1)
+2025-11-05 18:12:37,615 [sdlora.py] => [Conditional Growth] Active adapters: 5/5 (100.0%)
+2025-11-05 18:12:37,636 [sdlora.py] => [Conditional Growth] Beta values saved to ./CF100/beta_values_task_4.pt
+2025-11-05 18:12:53,258 [trainer.py] => No NME accuracy.
+2025-11-05 18:12:53,259 [trainer.py] => CNN: {'total': np.float64(84.36), '00-09': np.float64(75.3), '10-19': np.float64(85.1), '20-29': np.float64(92.9), '30-39': np.float64(78.9), '40-49': np.float64(89.6), 'old': np.float64(83.05), 'new': np.float64(89.6)}
+2025-11-05 18:12:53,259 [trainer.py] => CNN top1 curve: [np.float64(99.0), np.float64(94.85), np.float64(92.0), np.float64(88.48), np.float64(84.36)]
+2025-11-05 18:12:53,259 [trainer.py] => CNN top5 curve: [np.float64(100.0), np.float64(99.4), np.float64(98.97), np.float64(98.4), np.float64(97.96)]
+
+Average Accuracy (CNN): 91.73800000000001
+2025-11-05 18:12:53,259 [trainer.py] => Average Accuracy (CNN): 91.73800000000001 
+
+task 5
+2025-11-05 18:12:53,261 [trainer.py] => All params: 172004442
+2025-11-05 18:12:53,262 [trainer.py] => Trainable params: 407130
+2025-11-05 18:12:53,263 [sdlora.py] => Learning on 50-60
+2025-11-05 18:12:54,169 [_builder.py] => Loading pretrained weights from Hugging Face hub (timm/vit_base_patch16_224.augreg2_in21k_ft_in1k)
+2025-11-05 18:12:54,289 [_hub.py] => [timm/vit_base_patch16_224.augreg2_in21k_ft_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+save_file ./CF100/
+2025-11-05 18:12:54,491 [sdlora.py] => [Gumbel CL-LoRA] tau_init=5.0, tau_final=0.5, anneal_rate=0.999, lambda_sparsity=0.01
+  0%|          | 0/1 [00:00<?, ?it/s]Task 5, Epoch 1/1 => Loss 0.850 (clf=0.767, sparse=8.2486), tau=4.828, Train_accy 47.56, Test_accy 83.00:   0%|          | 0/1 [00:53<?, ?it/s]Task 5, Epoch 1/1 => Loss 0.850 (clf=0.767, sparse=8.2486), tau=4.828, Train_accy 47.56, Test_accy 83.00: 100%|██████████| 1/1 [00:53<00:00, 53.90s/it]Task 5, Epoch 1/1 => Loss 0.850 (clf=0.767, sparse=8.2486), tau=4.828, Train_accy 47.56, Test_accy 83.00: 100%|██████████| 1/1 [00:53<00:00, 53.90s/it]
+2025-11-05 18:13:48,393 [sdlora.py] => Task 5, Epoch 1/1 => Loss 0.850 (clf=0.767, sparse=8.2486), tau=4.828, Train_accy 47.56, Test_accy 83.00
+2025-11-05 18:13:48,395 [sdlora.py] => 
+[Conditional Growth] Task 5 - Beta values: [0.22235659 0.15257852 0.18183018 0.15143403 0.12513404 0.16666667]
+2025-11-05 18:13:48,395 [sdlora.py] => [Conditional Growth] Current task beta: 0.1667, threshold: 0.1
+[GumbelGate] Keeping task 5 (beta above threshold)
+2025-11-05 18:13:48,395 [sdlora.py] => [Conditional Growth] ✓ Keeping adapter for task 5 (beta=0.1667 > 0.1)
+2025-11-05 18:13:48,395 [sdlora.py] => [Conditional Growth] Active adapters: 6/6 (100.0%)
+2025-11-05 18:13:48,412 [sdlora.py] => [Conditional Growth] Beta values saved to ./CF100/beta_values_task_5.pt
+2025-11-05 18:14:07,476 [trainer.py] => No NME accuracy.
+2025-11-05 18:14:07,476 [trainer.py] => CNN: {'total': np.float64(83.0), '00-09': np.float64(71.4), '10-19': np.float64(84.6), '20-29': np.float64(92.2), '30-39': np.float64(77.8), '40-49': np.float64(86.7), '50-59': np.float64(85.3), 'old': np.float64(82.54), 'new': np.float64(85.3)}
+2025-11-05 18:14:07,477 [trainer.py] => CNN top1 curve: [np.float64(99.0), np.float64(94.85), np.float64(92.0), np.float64(88.48), np.float64(84.36), np.float64(83.0)]
+2025-11-05 18:14:07,477 [trainer.py] => CNN top5 curve: [np.float64(100.0), np.float64(99.4), np.float64(98.97), np.float64(98.4), np.float64(97.96), np.float64(97.47)]
+
+Average Accuracy (CNN): 90.28166666666668
+2025-11-05 18:14:07,477 [trainer.py] => Average Accuracy (CNN): 90.28166666666668 
+
+task 6
+2025-11-05 18:14:07,478 [trainer.py] => All params: 172012132
+2025-11-05 18:14:07,479 [trainer.py] => Trainable params: 414820
+2025-11-05 18:14:07,480 [sdlora.py] => Learning on 60-70
+2025-11-05 18:14:08,311 [_builder.py] => Loading pretrained weights from Hugging Face hub (timm/vit_base_patch16_224.augreg2_in21k_ft_in1k)
+2025-11-05 18:14:08,431 [_hub.py] => [timm/vit_base_patch16_224.augreg2_in21k_ft_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+save_file ./CF100/
+2025-11-05 18:14:08,652 [sdlora.py] => [Gumbel CL-LoRA] tau_init=5.0, tau_final=0.5, anneal_rate=0.999, lambda_sparsity=0.01
+  0%|          | 0/1 [00:00<?, ?it/s]Task 6, Epoch 1/1 => Loss 0.673 (clf=0.581, sparse=9.1777), tau=4.828, Train_accy 51.32, Test_accy 82.76:   0%|          | 0/1 [00:58<?, ?it/s]Task 6, Epoch 1/1 => Loss 0.673 (clf=0.581, sparse=9.1777), tau=4.828, Train_accy 51.32, Test_accy 82.76: 100%|██████████| 1/1 [00:58<00:00, 58.69s/it]Task 6, Epoch 1/1 => Loss 0.673 (clf=0.581, sparse=9.1777), tau=4.828, Train_accy 51.32, Test_accy 82.76: 100%|██████████| 1/1 [00:58<00:00, 58.69s/it]
+2025-11-05 18:15:07,340 [sdlora.py] => Task 6, Epoch 1/1 => Loss 0.673 (clf=0.581, sparse=9.1777), tau=4.828, Train_accy 51.32, Test_accy 82.76
+2025-11-05 18:15:07,341 [sdlora.py] => 
+[Conditional Growth] Task 6 - Beta values: [0.16679272 0.12509029 0.14569221 0.10987201 0.17276056 0.13693509
+ 0.14285715]
+2025-11-05 18:15:07,341 [sdlora.py] => [Conditional Growth] Current task beta: 0.1429, threshold: 0.1
+[GumbelGate] Keeping task 6 (beta above threshold)
+2025-11-05 18:15:07,341 [sdlora.py] => [Conditional Growth] ✓ Keeping adapter for task 6 (beta=0.1429 > 0.1)
+2025-11-05 18:15:07,341 [sdlora.py] => [Conditional Growth] Active adapters: 7/7 (100.0%)
+2025-11-05 18:15:07,359 [sdlora.py] => [Conditional Growth] Beta values saved to ./CF100/beta_values_task_6.pt
+2025-11-05 18:15:30,415 [trainer.py] => No NME accuracy.
+2025-11-05 18:15:30,416 [trainer.py] => CNN: {'total': np.float64(82.76), '00-09': np.float64(68.9), '10-19': np.float64(82.8), '20-29': np.float64(91.7), '30-39': np.float64(76.9), '40-49': np.float64(85.5), '50-59': np.float64(82.3), '60-69': np.float64(91.2), 'old': np.float64(81.35), 'new': np.float64(91.2)}
+2025-11-05 18:15:30,416 [trainer.py] => CNN top1 curve: [np.float64(99.0), np.float64(94.85), np.float64(92.0), np.float64(88.48), np.float64(84.36), np.float64(83.0), np.float64(82.76)]
+2025-11-05 18:15:30,416 [trainer.py] => CNN top5 curve: [np.float64(100.0), np.float64(99.4), np.float64(98.97), np.float64(98.4), np.float64(97.96), np.float64(97.47), np.float64(97.2)]
+
+Average Accuracy (CNN): 89.20714285714287
+2025-11-05 18:15:30,416 [trainer.py] => Average Accuracy (CNN): 89.20714285714287 
+
+task 7
+2025-11-05 18:15:30,417 [trainer.py] => All params: 172019822
+2025-11-05 18:15:30,419 [trainer.py] => Trainable params: 422510
+2025-11-05 18:15:30,420 [sdlora.py] => Learning on 70-80
+2025-11-05 18:15:31,284 [_builder.py] => Loading pretrained weights from Hugging Face hub (timm/vit_base_patch16_224.augreg2_in21k_ft_in1k)
+2025-11-05 18:15:31,406 [_hub.py] => [timm/vit_base_patch16_224.augreg2_in21k_ft_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+save_file ./CF100/
+2025-11-05 18:15:31,638 [sdlora.py] => [Gumbel CL-LoRA] tau_init=5.0, tau_final=0.5, anneal_rate=0.999, lambda_sparsity=0.01
+  0%|          | 0/1 [00:00<?, ?it/s]Task 7, Epoch 1/1 => Loss 0.825 (clf=0.737, sparse=8.8652), tau=4.828, Train_accy 29.44, Test_accy 79.56:   0%|          | 0/1 [01:04<?, ?it/s]Task 7, Epoch 1/1 => Loss 0.825 (clf=0.737, sparse=8.8652), tau=4.828, Train_accy 29.44, Test_accy 79.56: 100%|██████████| 1/1 [01:04<00:00, 64.24s/it]Task 7, Epoch 1/1 => Loss 0.825 (clf=0.737, sparse=8.8652), tau=4.828, Train_accy 29.44, Test_accy 79.56: 100%|██████████| 1/1 [01:04<00:00, 64.24s/it]
+2025-11-05 18:16:35,880 [sdlora.py] => Task 7, Epoch 1/1 => Loss 0.825 (clf=0.737, sparse=8.8652), tau=4.828, Train_accy 29.44, Test_accy 79.56
+2025-11-05 18:16:35,881 [sdlora.py] => 
+[Conditional Growth] Task 7 - Beta values: [0.13901487 0.14301673 0.12842613 0.10464861 0.11867008 0.15888983
+ 0.08233376 0.125     ]
+2025-11-05 18:16:35,881 [sdlora.py] => [Conditional Growth] Current task beta: 0.1250, threshold: 0.1
+[GumbelGate] Keeping task 7 (beta above threshold)
+2025-11-05 18:16:35,881 [sdlora.py] => [Conditional Growth] ✓ Keeping adapter for task 7 (beta=0.1250 > 0.1)
+2025-11-05 18:16:35,882 [sdlora.py] => [Conditional Growth] Active adapters: 8/8 (100.0%)
+2025-11-05 18:16:35,897 [sdlora.py] => [Conditional Growth] Beta values saved to ./CF100/beta_values_task_7.pt
+2025-11-05 18:17:02,956 [trainer.py] => No NME accuracy.
+2025-11-05 18:17:02,956 [trainer.py] => CNN: {'total': np.float64(79.56), '00-09': np.float64(68.6), '10-19': np.float64(82.3), '20-29': np.float64(91.6), '30-39': np.float64(76.6), '40-49': np.float64(84.3), '50-59': np.float64(80.3), '60-69': np.float64(88.5), '70-79': np.float64(64.3), 'old': np.float64(81.74), 'new': np.float64(64.3)}
+2025-11-05 18:17:02,956 [trainer.py] => CNN top1 curve: [np.float64(99.0), np.float64(94.85), np.float64(92.0), np.float64(88.48), np.float64(84.36), np.float64(83.0), np.float64(82.76), np.float64(79.56)]
+2025-11-05 18:17:02,956 [trainer.py] => CNN top5 curve: [np.float64(100.0), np.float64(99.4), np.float64(98.97), np.float64(98.4), np.float64(97.96), np.float64(97.47), np.float64(97.2), np.float64(96.59)]
+
+Average Accuracy (CNN): 88.00125
+2025-11-05 18:17:02,956 [trainer.py] => Average Accuracy (CNN): 88.00125 
+
+task 8
+2025-11-05 18:17:02,958 [trainer.py] => All params: 172027512
+2025-11-05 18:17:02,959 [trainer.py] => Trainable params: 430200
+2025-11-05 18:17:02,960 [sdlora.py] => Learning on 80-90
+2025-11-05 18:17:03,785 [_builder.py] => Loading pretrained weights from Hugging Face hub (timm/vit_base_patch16_224.augreg2_in21k_ft_in1k)
+2025-11-05 18:17:03,904 [_hub.py] => [timm/vit_base_patch16_224.augreg2_in21k_ft_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+save_file ./CF100/
+2025-11-05 18:17:04,217 [sdlora.py] => [Gumbel CL-LoRA] tau_init=5.0, tau_final=0.5, anneal_rate=0.999, lambda_sparsity=0.01
+  0%|          | 0/1 [00:00<?, ?it/s]Task 8, Epoch 1/1 => Loss 0.790 (clf=0.700, sparse=9.0091), tau=4.828, Train_accy 35.28, Test_accy 78.86:   0%|          | 0/1 [01:09<?, ?it/s]Task 8, Epoch 1/1 => Loss 0.790 (clf=0.700, sparse=9.0091), tau=4.828, Train_accy 35.28, Test_accy 78.86: 100%|██████████| 1/1 [01:09<00:00, 69.73s/it]Task 8, Epoch 1/1 => Loss 0.790 (clf=0.700, sparse=9.0091), tau=4.828, Train_accy 35.28, Test_accy 78.86: 100%|██████████| 1/1 [01:09<00:00, 69.73s/it]
+2025-11-05 18:18:13,952 [sdlora.py] => Task 8, Epoch 1/1 => Loss 0.790 (clf=0.700, sparse=9.0091), tau=4.828, Train_accy 35.28, Test_accy 78.86
+2025-11-05 18:18:13,954 [sdlora.py] => 
+[Conditional Growth] Task 8 - Beta values: [0.1812692  0.07218254 0.1035317  0.08668417 0.11032306 0.10519477
+ 0.10198069 0.12772277 0.11111111]
+2025-11-05 18:18:13,954 [sdlora.py] => [Conditional Growth] Current task beta: 0.1111, threshold: 0.1
+[GumbelGate] Keeping task 8 (beta above threshold)
+2025-11-05 18:18:13,954 [sdlora.py] => [Conditional Growth] ✓ Keeping adapter for task 8 (beta=0.1111 > 0.1)
+2025-11-05 18:18:13,955 [sdlora.py] => [Conditional Growth] Active adapters: 9/9 (100.0%)
+2025-11-05 18:18:13,971 [sdlora.py] => [Conditional Growth] Beta values saved to ./CF100/beta_values_task_8.pt
+2025-11-05 18:18:44,898 [trainer.py] => No NME accuracy.
+2025-11-05 18:18:44,898 [trainer.py] => CNN: {'total': np.float64(78.86), '00-09': np.float64(67.8), '10-19': np.float64(80.8), '20-29': np.float64(91.2), '30-39': np.float64(76.6), '40-49': np.float64(83.2), '50-59': np.float64(79.7), '60-69': np.float64(88.5), '70-79': np.float64(62.3), '80-89': np.float64(79.6), 'old': np.float64(78.76), 'new': np.float64(79.6)}
+2025-11-05 18:18:44,899 [trainer.py] => CNN top1 curve: [np.float64(99.0), np.float64(94.85), np.float64(92.0), np.float64(88.48), np.float64(84.36), np.float64(83.0), np.float64(82.76), np.float64(79.56), np.float64(78.86)]
+2025-11-05 18:18:44,899 [trainer.py] => CNN top5 curve: [np.float64(100.0), np.float64(99.4), np.float64(98.97), np.float64(98.4), np.float64(97.96), np.float64(97.47), np.float64(97.2), np.float64(96.59), np.float64(96.2)]
+
+Average Accuracy (CNN): 86.98555555555555
+2025-11-05 18:18:44,899 [trainer.py] => Average Accuracy (CNN): 86.98555555555555 
+
+task 9
+2025-11-05 18:18:44,900 [trainer.py] => All params: 172035202
+2025-11-05 18:18:44,901 [trainer.py] => Trainable params: 437890
+2025-11-05 18:18:44,902 [sdlora.py] => Learning on 90-100
+2025-11-05 18:18:45,713 [_builder.py] => Loading pretrained weights from Hugging Face hub (timm/vit_base_patch16_224.augreg2_in21k_ft_in1k)
+2025-11-05 18:18:45,834 [_hub.py] => [timm/vit_base_patch16_224.augreg2_in21k_ft_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+save_file ./CF100/
+2025-11-05 18:18:46,158 [sdlora.py] => [Gumbel CL-LoRA] tau_init=5.0, tau_final=0.5, anneal_rate=0.999, lambda_sparsity=0.01
+  0%|          | 0/1 [00:00<?, ?it/s]Task 9, Epoch 1/1 => Loss 0.808 (clf=0.716, sparse=9.2840), tau=4.828, Train_accy 41.42, Test_accy 78.58:   0%|          | 0/1 [01:15<?, ?it/s]Task 9, Epoch 1/1 => Loss 0.808 (clf=0.716, sparse=9.2840), tau=4.828, Train_accy 41.42, Test_accy 78.58: 100%|██████████| 1/1 [01:15<00:00, 75.43s/it]Task 9, Epoch 1/1 => Loss 0.808 (clf=0.716, sparse=9.2840), tau=4.828, Train_accy 41.42, Test_accy 78.58: 100%|██████████| 1/1 [01:15<00:00, 75.43s/it]
+2025-11-05 18:20:01,585 [sdlora.py] => Task 9, Epoch 1/1 => Loss 0.808 (clf=0.716, sparse=9.2840), tau=4.828, Train_accy 41.42, Test_accy 78.58
+2025-11-05 18:20:01,588 [sdlora.py] => 
+[Conditional Growth] Task 9 - Beta values: [0.12740019 0.09128129 0.10461383 0.10065218 0.10292996 0.06767572
+ 0.10951728 0.08440113 0.11152843 0.1       ]
+2025-11-05 18:20:01,589 [sdlora.py] => [Conditional Growth] Current task beta: 0.1000, threshold: 0.1
+[GumbelGate] Keeping task 9 (beta above threshold)
+2025-11-05 18:20:01,589 [sdlora.py] => [Conditional Growth] ✓ Keeping adapter for task 9 (beta=0.1000 > 0.1)
+2025-11-05 18:20:01,589 [sdlora.py] => [Conditional Growth] Active adapters: 10/10 (100.0%)
+2025-11-05 18:20:01,612 [sdlora.py] => [Conditional Growth] Beta values saved to ./CF100/beta_values_task_9.pt
+2025-11-05 18:20:37,057 [trainer.py] => No NME accuracy.
+2025-11-05 18:20:37,058 [trainer.py] => CNN: {'total': np.float64(78.58), '00-09': np.float64(66.9), '10-19': np.float64(80.6), '20-29': np.float64(91.0), '30-39': np.float64(75.9), '40-49': np.float64(82.9), '50-59': np.float64(79.3), '60-69': np.float64(88.0), '70-79': np.float64(61.0), '80-89': np.float64(78.6), '90-99': np.float64(81.6), 'old': np.float64(78.24), 'new': np.float64(81.6)}
+2025-11-05 18:20:37,058 [trainer.py] => CNN top1 curve: [np.float64(99.0), np.float64(94.85), np.float64(92.0), np.float64(88.48), np.float64(84.36), np.float64(83.0), np.float64(82.76), np.float64(79.56), np.float64(78.86), np.float64(78.58)]
+2025-11-05 18:20:37,058 [trainer.py] => CNN top5 curve: [np.float64(100.0), np.float64(99.4), np.float64(98.97), np.float64(98.4), np.float64(97.96), np.float64(97.47), np.float64(97.2), np.float64(96.59), np.float64(96.2), np.float64(95.63)]
+
+Average Accuracy (CNN): 86.14500000000001
+2025-11-05 18:20:37,058 [trainer.py] => Average Accuracy (CNN): 86.14500000000001 
+
+Accuracy Matrix (CNN):
+[[99.  95.8 90.2 85.8 75.3 71.4 68.9 68.6 67.8 66.9]
+ [ 0.  93.9 90.9 88.9 85.1 84.6 82.8 82.3 80.8 80.6]
+ [ 0.   0.  94.9 94.6 92.9 92.2 91.7 91.6 91.2 91. ]
+ [ 0.   0.   0.  84.6 78.9 77.8 76.9 76.6 76.6 75.9]
+ [ 0.   0.   0.   0.  89.6 86.7 85.5 84.3 83.2 82.9]
+ [ 0.   0.   0.   0.   0.  85.3 82.3 80.3 79.7 79.3]
+ [ 0.   0.   0.   0.   0.   0.  91.2 88.5 88.5 88. ]
+ [ 0.   0.   0.   0.   0.   0.   0.  64.3 62.3 61. ]
+ [ 0.   0.   0.   0.   0.   0.   0.   0.  79.6 78.6]
+ [ 0.   0.   0.   0.   0.   0.   0.   0.   0.  81.6]]
+2025-11-05 18:20:37,059 [trainer.py] => Forgetting (CNN): 8.688888888888888

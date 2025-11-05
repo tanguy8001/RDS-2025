@@ -65,7 +65,37 @@ def _train(args):
     cnn_curve, nme_curve = {"top1": [], "top5": []}, {"top1": [], "top5": []}
     cnn_matrix, nme_matrix = [], []
 
-    for task in range(data_manager.nb_tasks):
+    # Find last completed task for resuming
+    start_task = 0
+    filepath = args.get('filepath', './')
+    for task_id in range(data_manager.nb_tasks):
+        # Check if task completed (LoRA weights and classifier saved)
+        lora_a_path = f"{filepath}lora_w_a_{task_id}.pt"
+        lora_b_path = f"{filepath}lora_w_b_{task_id}.pt"
+        cls_weight_path = f"{filepath}CLs_weight{task_id}.pt"
+        cls_bias_path = f"{filepath}CLs_bias{task_id}.pt"
+
+        if os.path.exists(lora_a_path) and os.path.exists(lora_b_path) and \
+           os.path.exists(cls_weight_path) and os.path.exists(cls_bias_path):
+            start_task = task_id + 1
+            logging.info(f"[RESUME] Task {task_id} already completed, will resume from task {start_task}")
+        else:
+            break
+
+    # Check if all tasks already completed
+    if start_task >= data_manager.nb_tasks:
+        logging.info(f"[RESUME] All {data_manager.nb_tasks} tasks already completed!")
+        logging.info(f"[RESUME] Training finished. Checkpoints saved in {filepath}")
+        logging.info(f"[RESUME] To restart training, delete checkpoints or change filepath.")
+        return
+
+    if start_task > 0:
+        logging.info(f"[RESUME] Resuming training from task {start_task}/{data_manager.nb_tasks}")
+        # Update model's task counter
+        model._cur_task = start_task - 1
+        model._known_classes = args["init_cls"] + (start_task - 1) * args["increment"] if start_task > 1 else args["init_cls"]
+
+    for task in range(start_task, data_manager.nb_tasks):
         # task = 9
         print('task',task)
         logging.info("All params: {}".format(count_parameters(model._network)))
