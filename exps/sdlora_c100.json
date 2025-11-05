@@ -27,10 +27,10 @@
     "batch_size": 128,
     "weight_decay": 2e-4,
 
-    "_comment_gumbel": "Gumbel CL-LoRA hyperparameters",
+    "_comment_gumbel": "Gumbel CL-LoRA: Trust sparsemax for adaptive pruning",
     "gumbel_tau_init": 5.0,
     "gumbel_tau_final": 0.5,
     "gumbel_anneal_rate": 0.999,
     "lambda_sparsity": 0.001,
-    "growth_threshold": 0.1
+    "growth_threshold": 1e-6
 }

@@ -321,16 +321,13 @@ class Learner(BaseLearner):
 
     def _conditional_growth_decision(self):
         """
-        Conditional growth mechanism (Equation 4).
+        Conditional growth mechanism: Trust sparsemax to identify useful adapters.
 
-        After training on task t:
-        1. Evaluate beta_t (gate weight for current task)
-        2. If beta_t > threshold: keep adapter, increment N
-        3. If beta_t <= threshold: prune adapter, N unchanged
-
-        This enables sublinear parameter growth during continual learning.
+        Sparsemax learns which adapters are useful and sets others to zero.
+        We make those zeros permanent to save memory (sublinear growth).
         """
-        threshold = self.args.get("growth_threshold", 0.1)
+        # Trust sparsemax: only prune true zeros (plus small epsilon for numerical stability)
+        threshold = self.args.get("growth_threshold", 1e-6)
         tau_eval = self.args.get("gumbel_tau_final", 0.5)
 
         # Get backbone
@@ -339,71 +336,48 @@ class Learner(BaseLearner):
         else:
             backbone = self._network.backbone
 
-        # Get GumbelGate from backbone
         gumbel_gate = backbone.gumbel_gate
 
-        # Evaluate beta values for current task
-        # We check all tasks up to and including current task
+        # Evaluate all task betas
         task_indices = list(range(self._cur_task + 1))
         beta_values = gumbel_gate.get_betas(task_indices, tau=tau_eval)
 
         logging.info(f"\n[Conditional Growth] Task {self._cur_task} - Beta values: {beta_values.detach().cpu().numpy()}")
+        logging.info(f"[Conditional Growth] Pruning threshold: {threshold:.1e} (sparsemax zeros)")
 
-        # Check ALL tasks' beta values (not just current task)
-        # This enables dynamic pruning: previously useful adapters can be pruned later
-        num_pruned_this_round = 0
-        num_kept_this_round = 0
+        # Prune adapters where sparsemax → 0
+        num_pruned = 0
+        for i, task_idx in enumerate(task_indices):
+            beta_val = beta_values[i].item()
 
-        if len(beta_values) > 0:
-            for i, task_idx in enumerate(task_indices):
-                beta_val = beta_values[i].item()
+            # Skip already pruned
+            if gumbel_gate.pruning_mask[task_idx] == 0:
+                continue
 
-                # Skip if already pruned
-                if gumbel_gate.pruning_mask[task_idx] == 0:
-                    continue
+            if beta_val < threshold:
+                # Sparsemax set to zero → prune permanently
+                gumbel_gate.prune_task(task_idx)
+                num_pruned += 1
+                logging.info(f"[Conditional Growth] ✗ Pruned task {task_idx} (beta={beta_val:.6f} ≈ 0)")
 
-                if beta_val > threshold:
-                    # Keep adapter
-                    gumbel_gate.keep_task(task_idx)
-                    num_kept_this_round += 1
-
-                    # Log current task separately for visibility
-                    if task_idx == self._cur_task:
-                        logging.info(f"[Conditional Growth] ✓ Keeping NEW adapter for task {task_idx} (beta={beta_val:.4f} > {threshold})")
-                    elif logging.getLogger().isEnabledFor(logging.DEBUG):
-                        logging.debug(f"[Conditional Growth] ✓ Task {task_idx}: beta={beta_val:.4f} (kept)")
-                else:
-                    # Prune adapter
-                    gumbel_gate.prune_task(task_idx)
-                    num_pruned_this_round += 1
-
-                    # Always log pruning decisions
-                    if task_idx == self._cur_task:
-                        logging.info(f"[Conditional Growth] ✗ Pruning NEW adapter for task {task_idx} (beta={beta_val:.4f} <= {threshold})")
-                        logging.info(f"[Conditional Growth] → New adapter deemed not useful, will not be stored")
-                    else:
-                        logging.info(f"[Conditional Growth] ✗ Pruning OLD adapter for task {task_idx} (beta={beta_val:.4f} <= {threshold})")
-                        logging.info(f"[Conditional Growth] → Task {task_idx} adapter no longer useful, pruned retroactively")
-
-        # Log statistics
+        # Statistics
         num_active = (gumbel_gate.pruning_mask[:self._cur_task+1] > 0).sum().item()
         num_total = self._cur_task + 1
-        logging.info(f"[Conditional Growth] Summary: {num_kept_this_round} kept, {num_pruned_this_round} pruned this round")
-        logging.info(f"[Conditional Growth] Active adapters: {num_active}/{num_total} ({100*num_active/num_total:.1f}%)")
+        logging.info(f"[Conditional Growth] Active: {num_active}/{num_total} ({100*num_active/num_total:.1f}%)")
 
         if num_active < num_total:
-            logging.info(f"[Conditional Growth] 🎯 Sublinear growth achieved: {num_total - num_active} adapters pruned!")
+            logging.info(f"[Conditional Growth] 🎯 Sublinear growth: {num_total - num_active} adapters pruned")
 
-        # Store beta values for logging/analysis
-        if len(self._multiple_gpus) > 1:
-            save_path = self.args['filepath'] + f'beta_values_task_{self._cur_task}.pt'
-        else:
-            save_path = self.args['filepath'] + f'beta_values_task_{self._cur_task}.pt'
+        # Save pruning mask for next task (CRITICAL: persistence across tasks)
+        mask_path = self.args['filepath'] + 'pruning_mask.pt'
+        torch.save(gumbel_gate.pruning_mask.cpu(), mask_path)
+        logging.info(f"[Conditional Growth] Pruning mask saved to {mask_path}")
 
+        # Save beta values for analysis
+        beta_path = self.args['filepath'] + f'beta_values_task_{self._cur_task}.pt'
         torch.save({
             'beta_values': beta_values.detach().cpu(),
             'task_indices': task_indices,
             'pruning_mask': gumbel_gate.pruning_mask.cpu(),
             'threshold': threshold,
-        }, save_path)
-        logging.info(f"[Conditional Growth] Beta values saved to {save_path}")
+        }, beta_path)

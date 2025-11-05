@@ -519,6 +519,15 @@ class LoRA_ViT_timm(nn.Module):
         # Initialize GumbelGate for task selection (replaces scaling factors)
         self.gumbel_gate = GumbelGate(max_tasks=20, init_alpha=0.8, init_logit=0.0)
 
+        # Load pruning mask from previous tasks (enables persistence)
+        mask_path = self.save_file + 'pruning_mask.pt'
+        if os.path.exists(mask_path):
+            self.gumbel_gate.pruning_mask = torch.load(mask_path)
+            num_pruned = (self.gumbel_gate.pruning_mask == 0).sum().item()
+            print(f'[GumbelGate] Loaded pruning mask: {num_pruned} adapters already pruned')
+        else:
+            print('[GumbelGate] No previous mask found, starting fresh')
+
         # Temperature for Gumbel-Sparsemax (will be updated by learner)
         self.tau = 1.0
 
