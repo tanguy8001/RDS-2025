@@ -12,11 +12,12 @@ This document describes the implementation of the Gumbel CL-LoRA formulation for
 ΔW_t = Σ_{i=1}^{t} β_i * α_i * (A_i B_i / ||A_i B_i||_F)
 ```
 
-**Implementation**: `backbone/lora.py:205-237` (_LoRA_qkv_timm_train.forward)
+**Implementation**: `backbone/lora.py:178-243` (_LoRA_qkv_timm_train.forward)
 
-- **Direction normalization**: Divides by `||w_b|| * ||w_a||` (lines 206-207)
-- **Magnitude parameters** (`α_i`): Stored in `GumbelGate.alpha` (line 277)
-- **Gate weights** (`β_i`): Computed via Gumbel-Sparsemax (line 217)
+- **Direction normalization**: Divides by `||w_b|| * ||w_a|| + 1e-8` for numerical stability (lines 214-215)
+- **Magnitude parameters** (`α_i`): Stored in `GumbelGate.alpha` (per-task)
+- **Gate weights** (`β_i`): Computed via Gumbel-Sparsemax (line 225-230)
+- **Pruned adapter handling**: Skipped entirely before normalization to prevent NaN (lines 186-187)
 
 ### 2. Gumbel-Sparsemax Sparse Gating (Equation 2)
 
@@ -24,11 +25,12 @@ This document describes the implementation of the Gumbel CL-LoRA formulation for
 β = sparsemax((l + G) / τ), where G ~ Gumbel(0,1)
 ```
 
-**Implementation**: `utils/gumbel_utils.py:33-73` (sparsemax), `utils/gumbel_utils.py:76-125` (gumbel_sparsemax)
+**Implementation**: `utils/gumbel_utils.py:32-86` (sparsemax), `utils/gumbel_utils.py:89-129` (gumbel_sparsemax)
 
 - **Sparsemax projection**: Yields exact zeros (unlike softmax)
 - **Gumbel noise**: Added during training for exploration
 - **Temperature τ**: Annealed from 5.0 → 0.5 during training
+- **Numerical stability**: -inf replaced with -1e9, epsilon added to divisions
 
 ### 3. Sparsity Regularization (Equation 3)
 
@@ -39,9 +41,10 @@ L_total = L_task + λ_sparsity * Ω_sparsity(β)
 
 **Implementation**: `models/sdlora.py:259-274` (_update_representation)
 
-- **Sparsity loss collection**: Lines 267-270 (collects from all LoRA layers)
-- **Total loss**: Line 274 (`loss = loss_clf + lambda_sparsity * sparsity_loss_total`)
-- **Default λ_sparsity**: 0.01 (configurable in JSON)
+- **Sparsity loss collection**: Collected from all LoRA layers per forward pass
+- **Total loss**: `loss = loss_clf + lambda_sparsity * sparsity_loss_total`
+- **Default λ_sparsity**: 0.001
+- **Note**: Sparsity loss is 0 when only 1 adapter exists (Task 1) - this is correct behavior
 
 ### 4. Conditional Growth Mechanism (Equation 4)
 
@@ -50,19 +53,20 @@ If β_t > δ: Keep adapter, N ← N+1
 If β_t ≤ δ: Prune adapter, N unchanged
 ```
 
-**Implementation**: `models/sdlora.py:322-384` (_conditional_growth_decision)
+**Implementation**: `models/sdlora.py:322-383` (_conditional_growth_decision)
 
-- **Threshold δ**: 0.1 (configurable as `growth_threshold`)
-- **Pruning mask**: Stored in `GumbelGate.pruning_mask` (line 289)
+- **Threshold δ**: 1e-6 (trusts sparsemax's natural zeros)
+- **Pruning mask**: Stored in `GumbelGate.pruning_mask` and persisted to disk
 - **Beta logging**: Saved to `CF100/beta_values_task_*.pt` for analysis
+- **Mask persistence**: Loaded at initialization to prevent "reappearing" adapters
 
 ## File Structure
 
 ### New Files
 
-1. **`utils/gumbel_utils.py`** (263 lines)
+1. **`utils/gumbel_utils.py`** (247 lines)
    - `sample_gumbel()`: Gumbel(0,1) noise sampling
-   - `sparsemax()`: Sparsemax projection (yields exact zeros)
+   - `sparsemax()`: Sparsemax projection with numerical stability safeguards
    - `gumbel_sparsemax()`: Combines Gumbel noise + Sparsemax
    - `sparsity_loss()`: Entropy-based sparsity regularization
    - `TemperatureScheduler`: Exponential temperature annealing
@@ -70,22 +74,24 @@ If β_t ≤ δ: Prune adapter, N unchanged
 ### Modified Files
 
 2. **`backbone/lora.py`**
-   - **Added**: `GumbelGate` class (lines 311-433)
+   - **Added**: `GumbelGate` class (lines 311-449)
      - Manages α (magnitude) and β (gate) parameters per task
      - Implements Gumbel-Sparsemax forward pass
      - Tracks pruning mask for conditional growth
+     - Persists mask across tasks
 
    - **Modified**: `_LoRA_qkv_timm_train` (lines 133-247)
-     - Replaced fixed scaling factors with GumbelGate
-     - Collects normalized adapter outputs
+     - **CRITICAL FIX**: Skips pruned adapters before normalization (lines 186-187)
+     - Collects normalized adapter outputs with epsilon for stability
      - Applies Gumbel-Sparsemax gating
      - Stores sparsity loss for backprop
 
    - **Modified**: `_LoRA_qkv_timm_eval` (lines 249-323)
      - Updated for GumbelGate (no Gumbel noise in eval)
 
-   - **Modified**: `LoRA_ViT_timm.__init__` (lines 503-532)
+   - **Modified**: `LoRA_ViT_timm.__init__` (lines 519-532)
      - Instantiates `GumbelGate` instead of `ParameterWrapper`
+     - **Loads pruning mask** from previous tasks if exists
      - Passes `gumbel_gate` to all LoRA layers
 
 3. **`models/sdlora.py`**
@@ -93,25 +99,26 @@ If β_t ≤ δ: Prune adapter, N unchanged
 
    - **Modified**: `_update_representation` (lines 217-320)
      - Initializes temperature scheduler
-     - Anneals τ during training (line 241)
-     - Collects sparsity loss from LoRA layers (lines 267-270)
-     - Adds sparsity regularization to total loss (line 274)
+     - Anneals τ during training
+     - Collects sparsity loss from LoRA layers
+     - Adds sparsity regularization to total loss
      - Logs detailed loss breakdown (clf + sparse + tau)
 
-   - **Added**: `_conditional_growth_decision` (lines 322-384)
+   - **Modified**: `_conditional_growth_decision` (lines 322-383)
+     - Simplified to trust sparsemax (threshold=1e-6)
      - Evaluates β values after training
-     - Prunes adapters below threshold
+     - Prunes adapters where sparsemax → 0
+     - Saves pruning mask for persistence
      - Logs active/pruned adapter statistics
-     - Saves beta values for analysis
 
 4. **`exps/sdlora_c100.json`**
-   - **Added**: Gumbel CL-LoRA hyperparameters (lines 30-35)
+   - **Added**: Gumbel CL-LoRA hyperparameters
      ```json
      "gumbel_tau_init": 5.0,
      "gumbel_tau_final": 0.5,
      "gumbel_anneal_rate": 0.999,
-     "lambda_sparsity": 0.01,
-     "growth_threshold": 0.1
+     "lambda_sparsity": 0.001,
+     "growth_threshold": 1e-6
      ```
 
 ## How It Works
@@ -121,11 +128,15 @@ If β_t ≤ δ: Prune adapter, N unchanged
 1. **Initialization** (`models/sdlora.py:224-226`)
    - Create `TemperatureScheduler` with τ_init=5.0, τ_final=0.5
    - Initialize GumbelGate with learnable α and logit parameters
+   - Load pruning mask from previous tasks if exists
 
-2. **Forward Pass** (`backbone/lora.py:159-243`)
+2. **Forward Pass** (`backbone/lora.py:183-243`)
    - For each previous task i ∈ [0, t-1]:
-     - Load saved LoRA weights A_i, B_i
-     - Compute normalized output: `LoRA_i(x) / ||A_i|| * ||B_i||`
+     - **Check pruning mask first** (line 186)
+     - If pruned (mask=0), skip entirely to avoid NaN
+     - If active (mask=1):
+       - Load saved LoRA weights A_i, B_i
+       - Compute normalized output: `LoRA_i(x) / (||A_i|| * ||B_i|| + 1e-8)`
    - Apply Gumbel-Sparsemax gating:
      - Sample Gumbel noise (if training)
      - Compute β = sparsemax((logits + noise) / τ)
@@ -134,24 +145,24 @@ If β_t ≤ δ: Prune adapter, N unchanged
 
 3. **Loss Computation** (`models/sdlora.py:253-274`)
    - Classification loss: Cross-entropy on current task
-   - Sparsity loss: Collect from all LoRA layers
+   - Sparsity loss: Collect from all LoRA layers (returns 0 if only 1 adapter)
    - Total loss: `L = L_clf + λ * L_sparsity`
 
 4. **Temperature Annealing** (`models/sdlora.py:241`)
    - Each iteration: `τ ← τ_final + (τ_init - τ_final) * anneal_rate^step`
    - Encourages β to become more sparse over time
 
-5. **Conditional Growth** (`models/sdlora.py:322-384`)
-   - After training, evaluate β_t (current task's gate)
-   - If β_t > 0.1: Keep adapter (set mask=1)
-   - If β_t ≤ 0.1: Prune adapter (set mask=0)
-   - Pruned adapters contribute 0 to future tasks (via masked logits)
+5. **Conditional Growth** (`models/sdlora.py:322-383`)
+   - After training, evaluate β values for all tasks
+   - Trust sparsemax: if β_i ≈ 0 (< 1e-6), adapter is not useful
+   - Set mask=0 for pruned adapters
+   - Save mask to `CF100/pruning_mask.pt` for next task
 
 ### Evaluation Mode
 
 - No Gumbel noise (deterministic)
 - Uses learned β values (no sampling)
-- Pruned adapters automatically excluded (mask=0 → logit=-∞ → β=0)
+- Pruned adapters automatically excluded (skipped in forward pass)
 
 ## Hyperparameter Tuning Guide
 
@@ -162,8 +173,8 @@ If β_t ≤ δ: Prune adapter, N unchanged
 | `gumbel_tau_init` | 5.0 | Initial temperature | Higher = more exploration, softer selection |
 | `gumbel_tau_final` | 0.5 | Final temperature | Lower = sharper selection, closer to hard |
 | `gumbel_anneal_rate` | 0.999 | Decay rate per step | Higher = slower annealing |
-| `lambda_sparsity` | 0.01 | Sparsity regularization weight | Higher = sparser β, fewer active adapters |
-| `growth_threshold` | 0.1 | Pruning threshold | Higher = more aggressive pruning |
+| `lambda_sparsity` | 0.001 | Sparsity regularization weight | Higher = sparser β, fewer active adapters |
+| `growth_threshold` | 1e-6 | Pruning threshold | Set very low to trust sparsemax's learned zeros |
 
 ### Expected Behavior
 
@@ -182,10 +193,10 @@ If β_t ≤ δ: Prune adapter, N unchanged
 - May hurt performance if too aggressive
 - Good for memory-constrained settings
 
-**Low threshold**:
-- Keeps most adapters (slower pruning)
-- Higher final parameter count
-- Better accuracy, more memory
+**Trusting Sparsemax (threshold ≈ 0)**:
+- Model learns which adapters are useful
+- Natural sparsity from sparsemax activation
+- More adaptive than arbitrary thresholds
 
 ## Running the Code
 
@@ -198,14 +209,21 @@ python main.py --config=./exps/sdlora_c100.json
 ### Expected Output
 
 ```
-[Gumbel CL-LoRA] tau_init=5.0, tau_final=0.5, anneal_rate=0.999, lambda_sparsity=0.01
-Task 1, Epoch 5/20 => Loss 1.234 (clf=1.200, sparse=0.034), tau=3.421, Train_accy 75.23, Test_accy 72.11
+[GumbelGate] Loaded pruning mask: 1 adapters already pruned
+[Gumbel CL-LoRA] tau_init=5.0, tau_final=0.5, anneal_rate=0.999, lambda_sparsity=0.001
+Task 2, Epoch 5/20 => Loss 0.152 (clf=0.148, sparse=4.844), tau=3.421, Train_accy 88.86
 
-[Conditional Growth] Task 1 - Beta values: [0.35 0.65]
-[Conditional Growth] Current task beta: 0.6500, threshold: 0.1000
-[Conditional Growth] ✓ Keeping adapter for task 1 (beta=0.6500 > 0.1000)
-[Conditional Growth] Active adapters: 2/2 (100.0%)
+[Conditional Growth] Task 2 - Beta values: [0.9038 0.0000 0.0962]
+[Conditional Growth] Pruning threshold: 1.0e-06 (sparsemax zeros)
+✗ Pruned task 1 (beta=0.000000 ≈ 0)
+[Conditional Growth] Active: 2/3 (66.7%)
+[Conditional Growth] 🎯 Sublinear growth: 1 adapters pruned
 ```
+
+**Note on sparsity loss**:
+- Task 0: No sparsity loss (no previous adapters)
+- Task 1: `sparse=0.0000` (only 1 previous adapter → deterministic)
+- Task 2+: Non-zero sparsity loss (multiple adapters to choose from)
 
 ### Monitoring Beta Values
 
@@ -249,38 +267,36 @@ Alternative: **Per-layer** granularity would allow different selection per layer
 Once an adapter is pruned (mask=0), it stays pruned:
 ```python
 self.pruning_mask[task_id] = 0  # Permanent
+torch.save(self.pruning_mask, mask_path)  # Saved to disk
+```
+
+On next task:
+```python
+if os.path.exists(mask_path):
+    self.gumbel_gate.pruning_mask = torch.load(mask_path)  # Loaded
 ```
 
 Pruned adapters:
 - Still saved to disk (for reproducibility)
-- But excluded from inference (logit=-∞ → β=0)
+- But skipped in forward pass (lines 186-187)
 - Enable sublinear growth
 
-## Troubleshooting
+### Critical Bug Fixes
 
-### Issue: β values not sparse
+**NaN Issue (Fixed)**:
+- **Root cause**: Pruned adapters had near-zero norms → division by zero in normalization
+- **Solution**: Skip pruned adapters before computing normalized outputs (line 186)
+- **Additional safeguard**: Added epsilon to all normalizations (1e-8)
 
-**Cause**: λ_sparsity too low or τ too high
+**Mask Persistence Issue (Fixed)**:
+- **Root cause**: Each task created new backbone → fresh mask (all 1s)
+- **Solution**: Save mask after each task, load at initialization (lines 522-529)
+- **Result**: Pruned adapters stay pruned across tasks
 
-**Solution**: Increase `lambda_sparsity` (try 0.05 or 0.1)
-
-### Issue: All adapters pruned
-
-**Cause**: `growth_threshold` too high
-
-**Solution**: Lower threshold to 0.05 or 0.01
-
-### Issue: NaN losses
-
-**Cause**: Numerical instability in sparsemax or log
-
-**Solution**: Check for empty task_indices or zero β values
-
-### Issue: No improvement over baseline
-
-**Cause**: Hyperparameters not tuned for dataset
-
-**Solution**: Try grid search over λ_sparsity ∈ [0.001, 0.01, 0.1]
+**Sparsemax Stability (Fixed)**:
+- **Root cause**: -inf logits and division by zero in sparsemax
+- **Solution**: Replace -inf with -1e9, add epsilon to divisions
+- **Result**: Numerically stable even with extreme logit values
 
 ## Comparison with Original SD-LoRA
 
@@ -291,39 +307,19 @@ Pruned adapters:
 | Parameter growth | Linear (O(t)) | Sublinear (O(k) where k < t) |
 | Gating mechanism | None | Gumbel-Sparsemax |
 | Sparsity enforcement | None | Entropy regularization |
-| Pruning | None | Conditional growth (threshold-based) |
-
-## Expected Results on CIFAR-100
-
-### Baseline SD-LoRA
-- **Final accuracy**: ~68-72% (10 tasks)
-- **Active adapters**: 10/10 (100%)
-- **Parameter growth**: Linear
-
-### Gumbel CL-LoRA (Expected)
-- **Final accuracy**: ~66-70% (slight drop due to sparsity)
-- **Active adapters**: 5-7/10 (50-70% pruned)
-- **Parameter growth**: Sublinear (30-50% savings)
-
-Trade-off: Small accuracy drop for significant memory savings.
+| Pruning | None | Adaptive (trust sparsemax zeros) |
+| NaN handling | Potential issues | Multiple safeguards |
 
 ## Future Improvements
 
-1. **Adaptive threshold**: Adjust `growth_threshold` based on task difficulty
+1. **Adaptive threshold**: Learn threshold based on task difficulty (though current approach trusts sparsemax)
 2. **Top-k selection**: Replace threshold with fixed k active adapters
-3. **Per-layer gating**: Different β for each LoRA layer
-4. **Orthogonality loss**: Re-enable `ortho_loss` to prevent forgetting
-5. **Hard selection**: Use `hard=True` in gumbel_sparsemax for evaluation
+3. **Per-layer gating**: Different β for each LoRA layer (more flexibility)
+4. **Hard selection**: Use `hard=True` in gumbel_sparsemax for evaluation
+5. **Gradient clipping**: Additional stability for extreme scenarios
 
 ## References
 
 - **Sparsemax**: Martins & Astudillo (2016) - "From Softmax to Sparsemax"
 - **Gumbel-Softmax**: Jang et al. (2017) - "Categorical Reparameterization with Gumbel-Softmax"
-- **SD-LoRA**: Original paper on magnitude-direction decoupling
-
-## Contact
-
-For questions or issues with this implementation, please check:
-- Beta value logs in `CF100/beta_values_task_*.pt`
-- Training logs for loss breakdown
-- GumbelGate pruning mask for active adapters
+- **SD-LoRA**: Wu et al. (2025) - "Scalable Decoupled Low-Rank Adaptation for Class Incremental Learning"
