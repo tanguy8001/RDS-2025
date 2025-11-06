@@ -15,12 +15,7 @@ import torch.nn.functional as F
 
 def sample_gumbel(shape, device='cuda', eps=1e-20):
     """
-    Sample from Gumbel(0, 1) distribution.
-
-    Args:
-        shape: Shape of the sample
-        device: Device to place tensor on
-        eps: Small constant for numerical stability
+    Sample from Gumbel(0, 1) distribution: −log(−log(Uniform(0,1)))
 
     Returns:
         Gumbel noise tensor of given shape
@@ -47,6 +42,9 @@ def sparsemax(logits, dim=-1):
         "From Softmax to Sparsemax: A Sparse Model of Attention and Multi-Label Classification"
         https://arxiv.org/abs/1602.02068
     """
+    # Replace -inf with very large negative number for numerical stability
+    logits = torch.where(torch.isinf(logits), torch.full_like(logits, -1e9), logits)
+
     # Sort logits in descending order
     logits_sorted, _ = torch.sort(logits, dim=dim, descending=True)
 
@@ -62,7 +60,6 @@ def sparsemax(logits, dim=-1):
     shape[dim] = -1
     arange = arange.view(*shape)
 
-    # Compute threshold: (cumsum - 1) / k
     threshold = (cumsum - 1) / arange
 
     # Find support: where sorted logits > threshold
@@ -73,10 +70,15 @@ def sparsemax(logits, dim=-1):
 
     # Compute tau(z): the threshold value
     tau_sum = (logits_sorted * support).sum(dim=dim, keepdim=True)
-    tau = (tau_sum - 1) / k
+    # Add epsilon to prevent division by zero
+    tau = (tau_sum - 1) / (k + 1e-8)
 
     # Apply sparsemax transformation
     output = torch.clamp(logits - tau, min=0.0)
+
+    # Normalize to ensure probabilities sum to 1 (handle numerical errors)
+    output_sum = output.sum(dim=dim, keepdim=True)
+    output = output / (output_sum + 1e-8)
 
     return output
 
@@ -98,27 +100,19 @@ def gumbel_sparsemax(logits, tau=1.0, hard=False, dim=-1, training=True):
 
     Returns:
         beta: Task selection weights (sparse, sums to 1)
-
-    Example:
-        >>> logits = torch.tensor([2.0, 1.0, 0.5, 0.1])
-        >>> beta = gumbel_sparsemax(logits, tau=1.0)
-        >>> # beta might be [0.6, 0.3, 0.1, 0.0] - sparse!
     """
     if training:
-        # Sample Gumbel noise
         gumbel_noise = sample_gumbel(logits.shape, device=logits.device)
 
-        # Add noise and scale by temperature
         noisy_logits = (logits + gumbel_noise) / tau
     else:
-        # No noise during evaluation
+        # No noise during eval
         noisy_logits = logits / tau
 
-    # Apply sparsemax (yields sparse probabilities)
     soft_beta = sparsemax(noisy_logits, dim=dim)
 
     if hard:
-        # Hard selection: keep only maximum value (one-hot)
+        # Hard selection: keep only max val
         # Create one-hot vector for backprop
         hard_beta = torch.zeros_like(soft_beta)
         max_indices = torch.argmax(soft_beta, dim=dim, keepdim=True)
@@ -132,68 +126,50 @@ def gumbel_sparsemax(logits, tau=1.0, hard=False, dim=-1, training=True):
     return beta
 
 
-def gumbel_sparsemax_topk(logits, tau=1.0, k=3, dim=-1, training=True):
-    """
-    Gumbel-Sparsemax with top-k selection.
-
-    Similar to gumbel_sparsemax, but keeps only the top-k tasks.
-    Useful when you want to ensure exactly k adapters are selected.
-
-    Args:
-        logits: Gate logits, shape [..., num_tasks]
-        tau: Temperature parameter
-        k: Number of tasks to select
-        dim: Dimension to apply sparsemax over
-        training: Whether in training mode
-
-    Returns:
-        beta: Task selection weights (sparse, only top-k non-zero)
-    """
-    # Get soft beta from gumbel_sparsemax
-    beta = gumbel_sparsemax(logits, tau=tau, hard=False, dim=dim, training=training)
-
-    # Zero out all but top-k values
-    if k < logits.shape[dim]:
-        # Get top-k indices
-        topk_vals, topk_indices = torch.topk(beta, k, dim=dim)
-
-        # Create mask for top-k
-        mask = torch.zeros_like(beta)
-        mask.scatter_(dim, topk_indices, 1.0)
-
-        # Apply mask with straight-through
-        masked_beta = beta * mask
-
-        # Renormalize to sum to 1
-        beta = masked_beta / (masked_beta.sum(dim=dim, keepdim=True) + 1e-8)
-
-    return beta
+#def gumbel_sparsemax_topk(logits, tau=1.0, k=3, dim=-1, training=True):
+#    """
+#    Gumbel-Sparsemax with top-k selection.
+#
+#    Similar to gumbel_sparsemax, but keeps only the top-k tasks.
+#    Useful when you want to ensure exactly k adapters are selected.
+#
+#    Args:
+#        logits: Gate logits, shape [..., num_tasks]
+#        tau: Temperature parameter
+#        k: Number of tasks to select
+#        dim: Dimension to apply sparsemax over
+#        training: Whether in training mode
+#
+#    Returns:
+#        beta: Task selection weights (sparse, only top-k non-zero)
+#    """
+#    # Get soft beta from gumbel_sparsemax
+#    beta = gumbel_sparsemax(logits, tau=tau, hard=False, dim=dim, training=training)
+#
+#    # Zero out all but top-k values
+#    if k < logits.shape[dim]:
+#        # Get top-k indices
+#        topk_vals, topk_indices = torch.topk(beta, k, dim=dim)
+#
+#        # Create mask for top-k
+#        mask = torch.zeros_like(beta)
+#        mask.scatter_(dim, topk_indices, 1.0)
+#
+#        # Apply mask with straight-through
+#        masked_beta = beta * mask
+#
+#        # Renormalize to sum to 1
+#        beta = masked_beta / (masked_beta.sum(dim=dim, keepdim=True) + 1e-8)
+#
+#    return beta
 
 
 def sparsity_loss(beta, eps=1e-8):
     """
-    Entropy-based sparsity regularization (Equation 3 in paper).
-
-    Encourages beta to be sparse (one-hot or near one-hot).
-
+    Entropy-based sparsity regularization (Eq. 3 in paper).
     Loss = -Σ β_i log(β_i + ε)
-
-    This is the negative entropy, which is minimized when beta is sparse.
-
-    Args:
-        beta: Task selection weights, shape [batch_size, num_tasks] or [num_tasks]
-        eps: Small constant for numerical stability
-
-    Returns:
-        Scalar sparsity loss
-
-    Example:
-        >>> beta = torch.tensor([0.7, 0.2, 0.1, 0.0])  # Sparse
-        >>> loss1 = sparsity_loss(beta)  # Low loss
-        >>>
-        >>> beta = torch.tensor([0.25, 0.25, 0.25, 0.25])  # Uniform
-        >>> loss2 = sparsity_loss(beta)  # Higher loss
     """
+    # Beta is (bs, num_tasks) or (num_tasks)
     # Negative entropy (encourages low entropy = high sparsity)
     entropy = -torch.sum(beta * torch.log(beta + eps), dim=-1)
     return entropy.mean()
@@ -229,7 +205,6 @@ class TemperatureScheduler:
         return max(tau, self.tau_final)  # Ensure we don't go below tau_final
 
     def reset(self):
-        """Reset scheduler to initial state."""
         self.current_step = 0
 
     def get_temperature(self):
@@ -238,23 +213,6 @@ class TemperatureScheduler:
 
 
 def hard_selection(beta, threshold=0.1):
-    """
-    Apply hard threshold selection for conditional growth (Equation 4).
-
-    Determines which adapters to keep based on their beta values.
-
-    Args:
-        beta: Task selection weights, shape [num_tasks]
-        threshold: Minimum beta value to keep adapter (default: 0.1)
-
-    Returns:
-        mask: Binary mask indicating which adapters to keep, shape [num_tasks]
-
-    Example:
-        >>> beta = torch.tensor([0.5, 0.3, 0.15, 0.05, 0.0])
-        >>> mask = hard_selection(beta, threshold=0.1)
-        >>> # mask = [1, 1, 1, 0, 0] - keeps first 3 adapters
-    """
     return (beta > threshold).float()
 
 

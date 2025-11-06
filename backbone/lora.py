@@ -178,9 +178,16 @@ class _LoRA_qkv_timm_train(nn.Module):
         # Collect normalized adapter outputs for previous tasks
         adapter_outputs_q = []
         adapter_outputs_v = []
-        task_indices = list(range(self.task_id))
+        task_indices = []
 
+        # IMPORTANT: Only compute outputs for non-pruned adapters
         for i in range(self.task_id):
+            # Skip pruned adapters to prevent NaN from division by zero
+            if self.gumbel_gate.pruning_mask[i] == 0:
+                continue
+
+            task_indices.append(i)
+
             saved_A_i, saved_B_i = self.saved_A['saved_A_'+str(i)], self.saved_B['saved_B_'+str(i)]
             Q, V = list(enumerate(zip(saved_A_i, saved_B_i)))[self.t_layer_i*2: self.t_layer_i*2+2]
             _, (A_q, B_q) = Q
@@ -202,9 +209,10 @@ class _LoRA_qkv_timm_train(nn.Module):
             w_b_linear_v.weight.requires_grad = False
             w_b_linear_v.to(x.device)
 
-            # Compute normalized adapter output (Equation 1: direction decoupling)
-            norm_q = torch.norm(w_b_linear_q.weight) * torch.norm(w_a_linear_q.weight)
-            norm_v = torch.norm(w_b_linear_v.weight) * torch.norm(w_a_linear_v.weight)
+            # Compute normalized adapter output (Eq 1: dir decoupling)
+            # Add eps for num stability
+            norm_q = torch.norm(w_b_linear_q.weight) * torch.norm(w_a_linear_q.weight) + 1e-8
+            norm_v = torch.norm(w_b_linear_v.weight) * torch.norm(w_a_linear_v.weight) + 1e-8
 
             adapter_out_q = w_b_linear_q(w_a_linear_q(x)) / norm_q
             adapter_out_v = w_b_linear_v(w_a_linear_v(x)) / norm_v
@@ -212,7 +220,7 @@ class _LoRA_qkv_timm_train(nn.Module):
             adapter_outputs_q.append(adapter_out_q)
             adapter_outputs_v.append(adapter_out_v)
 
-        # Apply Gumbel-Sparsemax gating to previous tasks (Equation 2)
+        # Apply Gumbel-Sparsemax gating to previous tasks (Eq 2)
         if len(adapter_outputs_q) > 0:
             new_q, beta_q, sparsity_loss_q = self.gumbel_gate(
                 adapter_outputs_q, task_indices, tau=tau, hard=False, training=self.training
@@ -326,10 +334,10 @@ class _LoRA_qkv_timm_eval(nn.Module):
 
 class GumbelGate(nn.Module):
     """
-    Gumbel-Sparsemax gating module for CL-LoRA task selection.
+    Gumbel-Sparsemax gating module for task selection.
 
     Maintains learnable gate logits and magnitude parameters (alpha, beta)
-    for each task, implementing Equations 1-2 from the Gumbel CL-LoRA paper.
+    for each task, implementing Equations 1-2 from our paper.
 
     Args:
         max_tasks: Maximum number of tasks (e.g., 20 for CIFAR-100)
@@ -351,7 +359,7 @@ class GumbelGate(nn.Module):
             nn.Parameter(torch.tensor([init_logit])) for _ in range(max_tasks)
         ])
 
-        # Pruning mask: binary mask for conditional growth (Equation 4)
+        # Pruning mask: binary mask for conditional growth (Eq 4)
         # Once set to 0, the adapter is permanently pruned
         self.register_buffer('pruning_mask', torch.ones(max_tasks))
 
@@ -407,16 +415,6 @@ class GumbelGate(nn.Module):
         return weighted_output, beta, sparsity_reg
 
     def get_betas(self, task_indices, tau=1.0):
-        """
-        Get current beta values (for logging/pruning decisions).
-
-        Args:
-            task_indices: List of task IDs
-            tau: Temperature
-
-        Returns:
-            beta: Task selection weights
-        """
         if len(task_indices) == 0:
             return torch.tensor([])
 
@@ -431,9 +429,6 @@ class GumbelGate(nn.Module):
     def prune_task(self, task_id):
         """
         Permanently prune a task by setting its mask to 0.
-
-        Args:
-            task_id: Task ID to prune
         """
         self.pruning_mask[task_id] = 0
         print(f"[GumbelGate] Pruned task {task_id} (beta below threshold)")
@@ -441,9 +436,6 @@ class GumbelGate(nn.Module):
     def keep_task(self, task_id):
         """
         Keep a task (set mask to 1).
-
-        Args:
-            task_id: Task ID to keep
         """
         self.pruning_mask[task_id] = 1
         print(f"[GumbelGate] Keeping task {task_id} (beta above threshold)")
@@ -475,24 +467,19 @@ class LoRA_ViT_timm(nn.Module):
         assert r > 0
         self.rank =r
         self.base_vit = copy.deepcopy(vit_model)
-        
-
 
         if not eval:
             self.save_file = filepath
             self.increment = increment
             print('save_file', self.save_file)
 
-
         if lora_layer:
             self.lora_layer = lora_layer
         else:
             self.lora_layer = list(range(len(vit_model.blocks)))
 
-
         self.w_As, self.w_Bs = [], []  # These are linear layers
 
-        
         if index:
             print('Initialize task-id and curtask id')
             self.task_id, self.cur_id = 0,0
@@ -505,7 +492,6 @@ class LoRA_ViT_timm(nn.Module):
         for param in self.base_vit.parameters():
             param.requires_grad = False
 
-
         for param in vit_model.parameters():
             param.requires_grad = False
 
@@ -516,7 +502,7 @@ class LoRA_ViT_timm(nn.Module):
             file_path = self.save_file+'lora_w_b_'+str(i)+'.pt'
             saved_lora_B['saved_B_'+str(i)] = torch.load(file_path)
 
-        # Initialize GumbelGate for task selection (replaces scaling factors)
+        # Init GumbelGate for task selection (replaces scaling factors)
         self.gumbel_gate = GumbelGate(max_tasks=20, init_alpha=0.8, init_logit=0.0)
 
         # Load pruning mask from previous tasks (enables persistence)
@@ -528,7 +514,7 @@ class LoRA_ViT_timm(nn.Module):
         else:
             print('[GumbelGate] No previous mask found, starting fresh')
 
-        # Temperature for Gumbel-Sparsemax (will be updated by learner)
+        # Temp for Gumbel-Sparsemax (will be updated by learner)
         self.tau = 1.0
 
         # Do the surgery
