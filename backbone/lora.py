@@ -393,32 +393,30 @@ class GumbelGate(nn.Module):
         self.max_tasks = max_tasks
 
     def freeze_task_parameters(self, task_id):
-        """Freeze both α and l for task_id (called after task training)."""
         self.alpha[task_id].requires_grad = False
+        self.alpha[task_id].grad = None
         self.gate_logits[task_id].requires_grad = False
+        self.gate_logits[task_id].grad = None
 
     def unfreeze_task_parameters(self, task_id):
-        """Unfreeze both α and l for task_id (called at start of task training)."""
         self.alpha[task_id].requires_grad = True
         self.gate_logits[task_id].requires_grad = True
 
     def freeze_alphas(self, task_indices):
-        """Freeze α parameters for given task indices (Phase 1: learn selection)."""
         for idx in task_indices:
             self.alpha[idx].requires_grad = False
+            self.alpha[idx].grad = None
 
     def unfreeze_alphas(self, task_indices):
-        """Unfreeze α parameters for given task indices (Phase 2: learn magnitudes)."""
         for idx in task_indices:
             self.alpha[idx].requires_grad = True
 
     def freeze_logits(self, task_indices):
-        """Freeze gate logits for given task indices (Phase 2: fix selection)."""
         for idx in task_indices:
             self.gate_logits[idx].requires_grad = False
+            self.gate_logits[idx].grad = None
 
     def unfreeze_logits(self, task_indices):
-        """Unfreeze gate logits for given task indices (Phase 1: learn selection)."""
         for idx in task_indices:
             self.gate_logits[idx].requires_grad = True
 
@@ -583,7 +581,6 @@ class LoRA_ViT_timm(nn.Module):
         else:
             print('[GumbelGate] No previous mask found, starting fresh')
 
-        # Temp for Gumbel-Sparsemax (will be updated by learner)
         self.tau = 1.0
 
         # Do the surgery

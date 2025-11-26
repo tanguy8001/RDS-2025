@@ -255,7 +255,7 @@ class Learner(BaseLearner):
             gamma=self.args["lrate_decay"] if self.args["lrate_decay"] > 0 else 0.5
         )
 
-        logging.info(f"[Phase 2] Alpha learning rate: {self.args["alpha_lr"]:.2e} (base lr: {self.args['lrate']:.2e})")
+        logging.info(f'[Phase 2] Alpha learning rate: {self.args["alpha_lr"]:.2e} (base lr: {self.args["lrate"]:.2e})')
 
         self._train_phase(train_loader, test_loader, optimizer_p2, scheduler_p2, temp_scheduler,
                          lambda_sparsity, phase=2, epochs=phase2_epochs)
