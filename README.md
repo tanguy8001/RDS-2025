@@ -21,34 +21,66 @@ url={https://openreview.net/forum?id=5U1rlpX68A}
 - It demonstrates a strong stability-plasticity trade-off by converging to overlapping low-loss regions across sequential tasks, supported by empirical and theoretical analysis.
 - SD-LoRA and its two variants enable end-to-end optimization and efficient inference without component selection, achieving state-of-the-art performance on multiple CL benchmarks and foundation models.
 
-## 🔬 Gumbel-Sparsemax Extension
+## 🔬 Gumbel CL-LoRA: Sparse Continual Learning
 
-This repository includes an experimental extension implementing **Gumbel CL-LoRA** for sublinear parameter growth during continual learning:
+This repository includes **Gumbel CL-LoRA**, a clean implementation for **sublinear parameter growth** in continual learning via sparse task selection.
 
-**Core Mechanism:**
-- **Decoupled magnitude-direction learning**: LoRA directions are normalized (`||A_i B_i||_F^{-1} A_i B_i`), magnitudes learned via per-task α parameters
-- **Gumbel-Sparsemax gating**: Sparse task selection using Sparsemax (exact zeros) instead of softmax, with Gumbel noise for stochastic exploration
-- **Sparsity regularization**: Entropy loss `-Σ β_i log(β_i)` encourages sparse gating weights
-- **Temperature annealing**: τ: 5.0 → 0.5 for gradual transition from exploration to exploitation
+### **Mathematical Formulation**
 
-**Conditional Growth:**
-- After each task, adapters with β ≈ 0 (threshold=1e-6) are permanently pruned
-- Trusts Sparsemax's learned selection: when model sets β → 0, adapter is not useful
-- Pruning mask persists across tasks to prevent "reappearing" adapters
-- Enables sublinear growth: memory scales sub-linearly with number of tasks
+**1. Decoupled Adapter Structure (Eq. 1)**
+```
+ΔW_t = Σ_{i=1}^{t} β_i α_i × (A_i B_i / (||A_i|| × ||B_i||))
+```
+- Normalize LoRA directions (memory-efficient approximation)
+- Learn magnitudes (α) separately from directions
+- Sparse gating weights (β) from Sparsemax
 
-**Key Hyperparameters** (see `exps/sdlora_c100.json`):
+**2. Gumbel-Sparsemax Gating (Eq. 2)**
+```
+β = Sparsemax((l + G) / τ),  G ~ Gumbel(0,1)
+```
+- Sparsemax produces **exact zeros** (unlike softmax)
+- Gumbel noise enables stochastic exploration
+- Temperature τ anneals: 5.0 → 0.5
+
+**3. Training Loss (Eq. 3)**
+```
+L = L_task + λ_sparsity × Ω_sparsity(β)
+Ω_sparsity = -Σ β_i log(β_i + ε)
+```
+- Entropy penalty encourages sparse β
+- λ_sparsity = 0.01 (default)
+
+**4. Conditional Growth (Eq. 4)**
+```
+if β_t = 0:  PRUNE adapter
+if β_t > 0:  KEEP adapter
+```
+- **Scale-invariant**: No arbitrary threshold needed
+- Sparsemax naturally produces exact zeros
+- Decision based on optimization geometry
+
+### **Key Features**
+✅ **Memory-efficient normalization**: Uses `||A|| × ||B||` (avoids large matrix products)
+✅ **Unified gating**: ALL tasks (including current) go through same mechanism
+✅ **Efficient**: Reuses layer structure from original SD-LoRA (no OOM issues)
+✅ **Sparsity regularization**: Entropy penalty on β
+✅ **Natural pruning**: β = 0 → prune (no arbitrary threshold)
+
+### **Hyperparameters** (see `exps/sdlora_c100.json`)
 ```json
 {
-  "gumbel_tau_init": 5.0,        // Initial temperature (soft selection)
-  "gumbel_tau_final": 0.5,       // Final temperature (sharp selection)
+  "gumbel_tau_init": 5.0,        // Initial temp (exploration)
+  "gumbel_tau_final": 0.5,       // Final temp (exploitation)
   "gumbel_anneal_rate": 0.999,   // Exponential decay rate
-  "lambda_sparsity": 0.001,      // Sparsity regularization weight
-  "growth_threshold": 1e-6       // Pruning threshold (trust sparsemax)
+  "lambda_sparsity": 0.01        // Sparsity regularization weight
 }
 ```
 
-See `GUMBEL_CL_LORA_IMPLEMENTATION.md` for implementation details.
+### **Implementation Highlights**
+- `backbone/lora.py`: `GumbelGate` module with Sparsemax gating
+- `utils/gumbel_utils.py`: Sparsemax, Gumbel sampling, sparsity loss
+- `models/sdlora.py`: Training loop with temperature annealing + sparsity loss
 
 ## 📜 Results
 ![SD-LoRA](imgs/results1.jpg)

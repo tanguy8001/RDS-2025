@@ -19,7 +19,7 @@ from backbone.linears import SimpleLinear
 import gc
 import torch.nn.utils as utils
 import copy
-from utils.gumbel_utils import gumbel_sparsemax, sparsity_loss
+from utils.gumbel_utils import gumbel_sparsemax
 
 class _LoRALayer(nn.Module):
     def __init__(self, w: nn.Module, w_a: nn.Module, w_b: nn.Module):
@@ -131,314 +131,383 @@ class _LoRA_qkv_timm(nn.Module):
         return qkv
     
 class _LoRA_qkv_timm_train(nn.Module):
-    def __init__(self, qkv, linear_a_q, linear_b_q, linear_a_v, linear_b_v,
-        task_id, saved_A, saved_B, t_layer_i, rank, gumbel_gate, tau=1.0, eval1=False):
-        super().__init__()
-        self.linear_a_q = linear_a_q.cuda()
-        self.linear_b_q = linear_b_q.cuda()
-        self.linear_a_v = linear_a_v.cuda()
-        self.linear_b_v = linear_b_v.cuda()
+    """
+    Training-mode LoRA layer with Gumbel-Sparsemax gating.
 
-        # Replace scaling factors with GumbelGate
+    Implements Equation 1: ΔW_t = Σ β_i α_i × (A_i B_i / ||A_i B_i||_F)
+
+    Key design:
+    - ALL tasks (including current) go through the same gating mechanism
+    - Normalization by Frobenius norm: ||AB||_F = sqrt(sum((A @ B)^2))
+    - Previous tasks: frozen adapters loaded from disk
+    - Current task: trainable adapters with learnable α, l
+    """
+    def __init__(self, qkv, linear_a_q, linear_b_q, linear_a_v, linear_b_v,
+                 task_id, saved_A, saved_B, t_layer_i, rank, gumbel_gate, tau=1.0):
+        super().__init__()
+        self.qkv = qkv
+        self.dim = qkv.in_features
+        self.rank = rank
+        self.task_id = task_id
+        self.t_layer_i = t_layer_i
+
+        # Current task adapters (trainable)
+        self.linear_a_q = linear_a_q
+        self.linear_b_q = linear_b_q
+        self.linear_a_v = linear_a_v
+        self.linear_b_v = linear_b_v
+
+        # Previous task adapters (frozen, loaded from disk)
+        self.saved_A = saved_A
+        self.saved_B = saved_B
+
+        # Gumbel gate for task selection
         self.gumbel_gate = gumbel_gate
         self.tau = tau
 
-        self.task_id = task_id
-        self.qkv = qkv
-        self.dim = qkv.in_features
-        self.saved_A = saved_A
-        self.saved_B = saved_B
-        self.t_layer_i = t_layer_i
-        self.rank = rank
-        self.eval = eval1
-
-        # Store sparsity loss for backprop
-        self.sparsity_loss_q = 0
-        self.sparsity_loss_v = 0
-
-    def forward(self, x, tau=None):
+    def _compute_normalized_adapter(self, w_a, w_b, x):
         """
-        Forward pass with Gumbel-Sparsemax gating.
+        Compute normalized adapter output: (B @ A @ x) / norm
+
+        Note: Using ||B|| * ||A|| instead of ||BA||_F for memory efficiency.
+        This is the same as original SD-LoRA (trade correctness for efficiency).
 
         Args:
-            x: Input tensor [batch_size, seq_len, dim]
-            tau: Temperature (if None, uses self.tau)
+            w_a: Low-rank matrix A [rank, dim]
+            w_b: Low-rank matrix B [dim, rank]
+            x: Input [batch, seq, dim]
 
         Returns:
-            qkv: Output tensor [batch_size, seq_len, 3*dim]
+            Normalized adapter output [batch, seq, dim]
         """
-        if tau is None:
-            tau = self.tau
+        # Compute adapter output: B(A(x))
+        adapter_out = w_b(w_a(x))  # [B, seq, dim]
 
-        w_a_linear_q = nn.Linear(self.dim, self.rank, bias=False)
-        w_b_linear_q = nn.Linear(self.rank, self.dim, bias=False)
-        w_a_linear_v = nn.Linear(self.dim, self.rank, bias=False)
-        w_b_linear_v = nn.Linear(self.rank, self.dim, bias=False)
+        # Memory-efficient normalization (avoids matrix multiplication)
+        # ||B|| * ||A|| ≈ ||BA||_F (approximate, but avoids [dim, dim] intermediate)
+        norm = torch.norm(w_b.weight) * torch.norm(w_a.weight) + 1e-8
 
-        # Collect normalized adapter outputs for previous tasks
-        adapter_outputs_q = []
-        adapter_outputs_v = []
+        # Normalize
+        return adapter_out / norm
+
+    def forward(self, x):
+        """
+        Forward pass: ΔW = Σ β_i α_i × normalized_adapter_i
+
+        Args:
+            x: Input [batch, seq, dim]
+
+        Returns:
+            qkv: Output [batch, seq, 3*dim]
+        """
+        normalized_adapters_q = []
+        normalized_adapters_v = []
         task_indices = []
 
-        # IMPORTANT: Only compute outputs for non-pruned adapters
+        # === Load previous tasks (frozen) ===
         for i in range(self.task_id):
-            # Skip pruned adapters to prevent NaN from division by zero
+            # Skip pruned tasks
             if self.gumbel_gate.pruning_mask[i] == 0:
                 continue
 
             task_indices.append(i)
 
-            saved_A_i, saved_B_i = self.saved_A['saved_A_'+str(i)], self.saved_B['saved_B_'+str(i)]
-            Q, V = list(enumerate(zip(saved_A_i, saved_B_i)))[self.t_layer_i*2: self.t_layer_i*2+2]
-            _, (A_q, B_q) = Q
-            _, (A_v, B_v) = V
+            # Load saved adapters
+            saved_A_i = self.saved_A['saved_A_' + str(i)]
+            saved_B_i = self.saved_B['saved_B_' + str(i)]
 
-            # Load Q adapter
-            w_a_linear_q.weight = Parameter(A_q.weight)
-            w_a_linear_q.weight.requires_grad = False
-            w_a_linear_q.to(x.device)
-            w_b_linear_q.weight = Parameter(B_q.weight)
-            w_b_linear_q.weight.requires_grad = False
-            w_b_linear_q.to(x.device)
+            # Extract Q and V adapters for this layer
+            adapters = list(zip(saved_A_i, saved_B_i))
+            A_q, B_q = adapters[self.t_layer_i * 2]
+            A_v, B_v = adapters[self.t_layer_i * 2 + 1]
 
-            # Load V adapter
-            w_a_linear_v.weight = Parameter(A_v.weight)
-            w_a_linear_v.weight.requires_grad = False
-            w_a_linear_v.to(x.device)
-            w_b_linear_v.weight = Parameter(B_v.weight)
-            w_b_linear_v.weight.requires_grad = False
-            w_b_linear_v.to(x.device)
+            # Create temporary linear layers (no gradient)
+            w_a_q = nn.Linear(self.dim, self.rank, bias=False)
+            w_b_q = nn.Linear(self.rank, self.dim, bias=False)
+            w_a_v = nn.Linear(self.dim, self.rank, bias=False)
+            w_b_v = nn.Linear(self.rank, self.dim, bias=False)
 
-            # Compute normalized adapter output (Eq 1: dir decoupling)
-            # Add eps for num stability
-            norm_q = torch.norm(w_b_linear_q.weight) * torch.norm(w_a_linear_q.weight) + 1e-8
-            norm_v = torch.norm(w_b_linear_v.weight) * torch.norm(w_a_linear_v.weight) + 1e-8
+            # Load weights (frozen)
+            w_a_q.weight = nn.Parameter(A_q.weight.to(x.device), requires_grad=False)
+            w_b_q.weight = nn.Parameter(B_q.weight.to(x.device), requires_grad=False)
+            w_a_v.weight = nn.Parameter(A_v.weight.to(x.device), requires_grad=False)
+            w_b_v.weight = nn.Parameter(B_v.weight.to(x.device), requires_grad=False)
 
-            adapter_out_q = w_b_linear_q(w_a_linear_q(x)) / norm_q
-            adapter_out_v = w_b_linear_v(w_a_linear_v(x)) / norm_v
+            # Compute normalized outputs
+            norm_q = self._compute_normalized_adapter(w_a_q, w_b_q, x)
+            norm_v = self._compute_normalized_adapter(w_a_v, w_b_v, x)
 
-            adapter_outputs_q.append(adapter_out_q)
-            adapter_outputs_v.append(adapter_out_v)
+            normalized_adapters_q.append(norm_q)
+            normalized_adapters_v.append(norm_v)
 
-        # Apply Gumbel-Sparsemax gating to previous tasks (Eq 2)
-        if len(adapter_outputs_q) > 0:
-            new_q, beta_q, sparsity_loss_q = self.gumbel_gate(
-                adapter_outputs_q, task_indices, tau=tau, hard=False, training=self.training
+        # === Add current task (trainable) ===
+        task_indices.append(self.task_id)
+
+        norm_q_curr = self._compute_normalized_adapter(self.linear_a_q, self.linear_b_q, x)
+        norm_v_curr = self._compute_normalized_adapter(self.linear_a_v, self.linear_b_v, x)
+
+        normalized_adapters_q.append(norm_q_curr)
+        normalized_adapters_v.append(norm_v_curr)
+
+        # === Apply Gumbel-Sparsemax gating ===
+        if len(normalized_adapters_q) > 0:
+            delta_q, beta_q = self.gumbel_gate(
+                normalized_adapters_q, task_indices, tau=self.tau, training=self.training
             )
-            new_v, beta_v, sparsity_loss_v = self.gumbel_gate(
-                adapter_outputs_v, task_indices, tau=tau, hard=False, training=self.training
+            delta_v, beta_v = self.gumbel_gate(
+                normalized_adapters_v, task_indices, tau=self.tau, training=self.training
             )
-            # Store sparsity losses for regularization
-            self.sparsity_loss_q = sparsity_loss_q
-            self.sparsity_loss_v = sparsity_loss_v
+
+            # Store beta for sparsity loss computation
+            self.last_beta_q = beta_q
+            self.last_beta_v = beta_v
         else:
-            new_q, new_v = 0, 0
-            self.sparsity_loss_q = 0
-            self.sparsity_loss_v = 0
+            delta_q, delta_v = 0, 0
+            self.last_beta_q = None
+            self.last_beta_v = None
 
-        # Add current task adapter (with its own alpha from gumbel_gate)
-        # For current task, we use the alpha parameter directly
-        current_alpha_q = self.gumbel_gate.alpha[self.task_id]
-        current_alpha_v = self.gumbel_gate.alpha[self.task_id]
+        # === Apply to QKV ===
+        qkv = self.qkv(x)  # [B, seq, 3*dim]
+        qkv[:, :, :self.dim] += delta_q  # Add to Q
+        qkv[:, :, -self.dim:] += delta_v  # Add to V
 
-        new_q = new_q + current_alpha_q * self.linear_b_q(self.linear_a_q(x))
-        new_v = new_v + current_alpha_v * self.linear_b_v(self.linear_a_v(x))
-
-        # Apply to QKV
-        qkv = self.qkv(x)
-        qkv[:, :, : self.dim] += new_q
-        qkv[:, :, -self.dim :] += new_v
         return qkv
-
-    def get_sparsity_loss(self):
-        """Return total sparsity regularization loss."""
-        return self.sparsity_loss_q + self.sparsity_loss_v
 
 class _LoRA_qkv_timm_eval(nn.Module):
     """
     Evaluation mode LoRA layer with Gumbel-Sparsemax gating.
 
-    In timm it is implemented as:
-    self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-    B, N, C = x.shape
-    qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
-    q, k, v = qkv.unbind(0)
+    Same as training mode, but:
+    - No Gumbel noise (deterministic)
+    - Lower temperature (sharper selection)
+    - No gradient computation
     """
-    def __init__(self, task_id, qkv: nn.Module, saved_A, saved_B, t_layer_i, rank, gumbel_gate, save_file):
+    def __init__(self, task_id, qkv, saved_A, saved_B, t_layer_i, rank, gumbel_gate, save_file):
         super().__init__()
-        self.task_id = task_id
         self.qkv = qkv
         self.dim = qkv.in_features
+        self.rank = rank
+        self.task_id = task_id
+        self.t_layer_i = t_layer_i
+
         self.saved_A = saved_A
         self.saved_B = saved_B
-        self.t_layer_i = t_layer_i
-        self.rank = rank
-        self.save_file = save_file
         self.gumbel_gate = gumbel_gate
+        self.save_file = save_file
+
+    def _compute_normalized_adapter(self, w_a, w_b, x):
+        """Compute normalized adapter: (B @ A @ x) / norm (memory-efficient)"""
+        adapter_out = w_b(w_a(x))
+        norm = torch.norm(w_b.weight) * torch.norm(w_a.weight) + 1e-8
+        return adapter_out / norm
 
     def forward(self, x):
-        """
-        Evaluation forward pass with Gumbel gating (no Gumbel noise).
-        """
-        w_a_linear_q = nn.Linear(self.dim, self.rank, bias=False)
-        w_b_linear_q = nn.Linear(self.rank, self.dim, bias=False)
-        w_a_linear_v = nn.Linear(self.dim, self.rank, bias=False)
-        w_b_linear_v = nn.Linear(self.rank, self.dim, bias=False)
+        """Evaluation forward pass (no Gumbel noise)."""
+        normalized_adapters_q = []
+        normalized_adapters_v = []
+        task_indices = []
 
-        # Collect normalized adapter outputs
-        adapter_outputs_q = []
-        adapter_outputs_v = []
-        task_indices = list(range(self.task_id))
-
+        # Load all non-pruned tasks
         for i in range(self.task_id):
-            saved_A_i, saved_B_i = self.saved_A['saved_A_'+str(i)], self.saved_B['saved_B_'+str(i)]
-            Q, V = list(enumerate(zip(saved_A_i, saved_B_i)))[self.t_layer_i*2: self.t_layer_i*2+2]
-            _, (A_q, B_q) = Q
-            _, (A_v, B_v) = V
+            # Skip pruned tasks
+            if self.gumbel_gate.pruning_mask[i] == 0:
+                continue
 
-            w_a_linear_q.weight = Parameter(A_q.weight)
-            w_b_linear_q.weight = Parameter(B_q.weight)
-            w_a_linear_v.weight = Parameter(A_v.weight)
-            w_b_linear_v.weight = Parameter(B_v.weight)
+            task_indices.append(i)
 
-            # Compute normalized adapter output
-            norm_q = torch.norm(w_b_linear_q.weight) * torch.norm(w_a_linear_q.weight)
-            norm_v = torch.norm(w_b_linear_v.weight) * torch.norm(w_a_linear_v.weight)
+            # Load saved adapters
+            saved_A_i = self.saved_A['saved_A_' + str(i)]
+            saved_B_i = self.saved_B['saved_B_' + str(i)]
 
-            adapter_out_q = w_b_linear_q(w_a_linear_q(x)) / norm_q
-            adapter_out_v = w_b_linear_v(w_a_linear_v(x)) / norm_v
+            adapters = list(zip(saved_A_i, saved_B_i))
+            A_q, B_q = adapters[self.t_layer_i * 2]
+            A_v, B_v = adapters[self.t_layer_i * 2 + 1]
 
-            adapter_outputs_q.append(adapter_out_q)
-            adapter_outputs_v.append(adapter_out_v)
+            # Create temporary layers
+            w_a_q = nn.Linear(self.dim, self.rank, bias=False)
+            w_b_q = nn.Linear(self.rank, self.dim, bias=False)
+            w_a_v = nn.Linear(self.dim, self.rank, bias=False)
+            w_b_v = nn.Linear(self.rank, self.dim, bias=False)
 
-        # Apply Gumbel-Sparsemax gating (no noise in eval mode)
-        if len(adapter_outputs_q) > 0:
-            new_q, _, _ = self.gumbel_gate(
-                adapter_outputs_q, task_indices, tau=0.5, hard=False, training=False
+            w_a_q.weight = nn.Parameter(A_q.weight.to(x.device), requires_grad=False)
+            w_b_q.weight = nn.Parameter(B_q.weight.to(x.device), requires_grad=False)
+            w_a_v.weight = nn.Parameter(A_v.weight.to(x.device), requires_grad=False)
+            w_b_v.weight = nn.Parameter(B_v.weight.to(x.device), requires_grad=False)
+
+            # Normalize
+            norm_q = self._compute_normalized_adapter(w_a_q, w_b_q, x)
+            norm_v = self._compute_normalized_adapter(w_a_v, w_b_v, x)
+
+            normalized_adapters_q.append(norm_q)
+            normalized_adapters_v.append(norm_v)
+
+        # Apply gating (no Gumbel noise, low temp)
+        if len(normalized_adapters_q) > 0:
+            delta_q, _ = self.gumbel_gate(
+                normalized_adapters_q, task_indices, tau=0.5, training=False
             )
-            new_v, _, _ = self.gumbel_gate(
-                adapter_outputs_v, task_indices, tau=0.5, hard=False, training=False
+            delta_v, _ = self.gumbel_gate(
+                normalized_adapters_v, task_indices, tau=0.5, training=False
             )
         else:
-            new_q, new_v = 0, 0
+            delta_q, delta_v = 0, 0
 
-        # Note: Current task adapter is not included in eval mode
-        # (only previous tasks are aggregated)
-
+        # Apply to QKV
         qkv = self.qkv(x)
-        qkv[:, :, : self.dim] += new_q
-        qkv[:, :, -self.dim :] += new_v
+        qkv[:, :, :self.dim] += delta_q
+        qkv[:, :, -self.dim:] += delta_v
         return qkv
     
 
 
 class GumbelGate(nn.Module):
     """
-    Gumbel-Sparsemax gating module for task selection.
+    Gumbel-Sparsemax gating module for sparse task selection.
 
-    Maintains learnable gate logits and magnitude parameters (alpha, beta)
-    for each task, implementing Equations 1-2 from our paper.
+    Implements Equations 1-2 from Gumbel CL-LoRA:
+    - Learnable magnitude parameters α_i for each task
+    - Learnable gate logits l_i for Sparsemax selection
+    - β = Sparsemax((l + G) / τ) where G ~ Gumbel(0,1)
+    - Output: Σ β_i α_i × normalized_adapter_i
 
     Args:
-        max_tasks: Maximum number of tasks (e.g., 20 for CIFAR-100)
-        init_alpha: Initial value for magnitude parameters
-        init_logit: Initial value for gate logits
+        max_tasks: Maximum number of tasks (e.g., 20 for CIFAR-100 in 10-task splits)
+        init_alpha: Initial value for magnitude parameters α
+        init_logit: Initial value for gate logits l
     """
-    def __init__(self, max_tasks=20, init_alpha=0.8, init_logit=0.0):
-        super(GumbelGate, self).__init__()
+    def __init__(self, max_tasks=20, init_alpha=1.0, init_logit=0.0):
+        super().__init__()
 
-        # Alpha: learnable magnitude parameters (one per task)
-        # These replace the fixed scaling_factor in original SD-LoRA
+        # α: learnable magnitude parameters (one scalar per task)
         self.alpha = nn.ParameterList([
-            nn.Parameter(torch.tensor([init_alpha])) for _ in range(max_tasks)
+            nn.Parameter(torch.tensor(init_alpha)) for _ in range(max_tasks)
         ])
 
-        # Gate logits: learnable affinity scores (one per task)
-        # These determine task selection via Gumbel-Sparsemax
+        # l: learnable gate logits (one scalar per task)
         self.gate_logits = nn.ParameterList([
-            nn.Parameter(torch.tensor([init_logit])) for _ in range(max_tasks)
+            nn.Parameter(torch.tensor(init_logit)) for _ in range(max_tasks)
         ])
 
-        # Pruning mask: binary mask for conditional growth (Eq 4)
-        # Once set to 0, the adapter is permanently pruned
+        # Pruning mask: 1 = keep, 0 = pruned (permanent)
         self.register_buffer('pruning_mask', torch.ones(max_tasks))
-
         self.max_tasks = max_tasks
 
-    def forward(self, x, task_indices, tau=1.0, hard=False, training=True):
+    def freeze_task_parameters(self, task_id):
+        """Freeze both α and l for task_id (called after task training)."""
+        self.alpha[task_id].requires_grad = False
+        self.gate_logits[task_id].requires_grad = False
+
+    def unfreeze_task_parameters(self, task_id):
+        """Unfreeze both α and l for task_id (called at start of task training)."""
+        self.alpha[task_id].requires_grad = True
+        self.gate_logits[task_id].requires_grad = True
+
+    def freeze_alphas(self, task_indices):
+        """Freeze α parameters for given task indices (Phase 1: learn selection)."""
+        for idx in task_indices:
+            self.alpha[idx].requires_grad = False
+
+    def unfreeze_alphas(self, task_indices):
+        """Unfreeze α parameters for given task indices (Phase 2: learn magnitudes)."""
+        for idx in task_indices:
+            self.alpha[idx].requires_grad = True
+
+    def freeze_logits(self, task_indices):
+        """Freeze gate logits for given task indices (Phase 2: fix selection)."""
+        for idx in task_indices:
+            self.gate_logits[idx].requires_grad = False
+
+    def unfreeze_logits(self, task_indices):
+        """Unfreeze gate logits for given task indices (Phase 1: learn selection)."""
+        for idx in task_indices:
+            self.gate_logits[idx].requires_grad = True
+
+    def forward(self, normalized_adapters, task_indices, tau=1.0, training=True):
         """
-        Apply Gumbel-Sparsemax gating to select and scale adapters.
+        Apply Gumbel-Sparsemax gating.
 
         Args:
-            x: List of adapter outputs, one per task
-               Each element has shape [batch_size, seq_len, dim]
-            task_indices: List of task IDs to consider (e.g., [0, 1, 2] for first 3 tasks)
+            normalized_adapters: List of normalized adapter outputs [B, seq, dim]
+                                 Each is already normalized: adapter / ||A_i B_i||_F
+            task_indices: List of task IDs (e.g., [0, 1, 2] for first 3 tasks)
             tau: Temperature for Gumbel-Sparsemax
-            hard: If True, use hard (one-hot) selection
-            training: Whether in training mode
+            training: Whether in training mode (adds Gumbel noise)
 
         Returns:
-            weighted_output: Weighted sum of adapter outputs, shape [batch_size, seq_len, dim]
-            beta: Task selection weights, shape [num_active_tasks]
-            sparsity_reg: Sparsity regularization loss (scalar)
+            weighted_sum: Σ β_i α_i × normalized_adapter_i, shape [B, seq, dim]
+            beta: Sparse gate weights β from Sparsemax, shape [len(task_indices)]
         """
-        num_active_tasks = len(task_indices)
+        if len(task_indices) == 0:
+            return 0, None
 
-        if num_active_tasks == 0:
-            # No previous tasks
-            return 0, None, 0
-
-        # Gather logits for active tasks
-        logits = torch.cat([self.gate_logits[i] for i in task_indices], dim=0)  # [num_active_tasks]
+        # Gather logits: [l_0, l_1, ..., l_t]
+        logits = torch.stack([self.gate_logits[i] for i in task_indices])  # [N]
 
         # Apply pruning mask (set pruned tasks to -inf)
-        mask = torch.cat([self.pruning_mask[i:i+1] for i in task_indices], dim=0)  # [num_active_tasks]
+        mask = torch.stack([self.pruning_mask[i] for i in task_indices])  # [N]
         logits = logits.masked_fill(mask == 0, float('-inf'))
 
-        # Gumbel-Sparsemax selection (Equation 2)
-        beta = gumbel_sparsemax(logits, tau=tau, hard=hard, training=training)  # [num_active_tasks]
+        # Gumbel-Sparsemax: β = Sparsemax((l + G) / τ)
+        beta = gumbel_sparsemax(logits, tau=tau, training=training)  # [N]
 
-        # Gather alpha (magnitude) parameters
-        alphas = torch.cat([self.alpha[i] for i in task_indices], dim=0)  # [num_active_tasks]
+        # Gather magnitude parameters: [α_0, α_1, ..., α_t]
+        alphas = torch.stack([self.alpha[i] for i in task_indices])  # [N]
 
-        # Compute weighted sum: Σ β_i * α_i * LoRA_i(x)
-        # x is a list of tensors, each [batch, seq, dim]
-        weighted_output = 0
-        for i, adapter_output in enumerate(x):
-            # beta[i] is scalar, alphas[i] is scalar
-            weight = beta[i] * alphas[i]
-            weighted_output = weighted_output + weight * adapter_output
+        # Weighted sum: Σ β_i α_i × adapter_i
+        weighted_sum = 0
+        for i, adapter_out in enumerate(normalized_adapters):
+            weight = beta[i] * alphas[i]  # β_i * α_i (scalar)
+            weighted_sum = weighted_sum + weight * adapter_out
 
-        # Sparsity regularization (Equation 3)
-        sparsity_reg = sparsity_loss(beta) if training else torch.tensor(0.0, device=beta.device)
-
-        return weighted_output, beta, sparsity_reg
+        return weighted_sum, beta
 
     def get_betas(self, task_indices, tau=1.0):
+        """Compute β values without Gumbel noise (for evaluation/decision-making)."""
         if len(task_indices) == 0:
             return torch.tensor([])
 
-        logits = torch.cat([self.gate_logits[i] for i in task_indices], dim=0)
-        mask = torch.cat([self.pruning_mask[i:i+1] for i in task_indices], dim=0)
+        logits = torch.stack([self.gate_logits[i] for i in task_indices])
+        mask = torch.stack([self.pruning_mask[i] for i in task_indices])
         logits = logits.masked_fill(mask == 0, float('-inf'))
 
-        # No Gumbel noise, just sparsemax
-        beta = gumbel_sparsemax(logits, tau=tau, hard=False, training=False)
+        # No Gumbel noise (training=False)
+        beta = gumbel_sparsemax(logits, tau=tau, training=False)
         return beta
 
+    def get_selection_frequency(self, task_indices, tau=1.0, num_samples=10):
+        """
+        Sample multiple times from Gumbel-Sparsemax to measure selection robustness.
+
+        Returns:
+            mean_betas: Average β values across samples
+            selection_freq: Fraction of samples where β > 0 (in Sparsemax support)
+        """
+        if len(task_indices) == 0:
+            return torch.tensor([]), torch.tensor([])
+
+        logits = torch.stack([self.gate_logits[i] for i in task_indices])
+        mask = torch.stack([self.pruning_mask[i] for i in task_indices])
+        logits = logits.masked_fill(mask == 0, float('-inf'))
+
+        # Sample multiple times with Gumbel noise
+        beta_samples = []
+        for _ in range(num_samples):
+            beta = gumbel_sparsemax(logits, tau=tau, training=True)  # With Gumbel noise
+            beta_samples.append(beta)
+
+        beta_samples = torch.stack(beta_samples)  # [num_samples, num_tasks]
+        mean_betas = beta_samples.mean(dim=0)
+        selection_freq = (beta_samples > 1e-6).float().mean(dim=0)  # Fraction selected
+
+        return mean_betas, selection_freq
+
     def prune_task(self, task_id):
-        """
-        Permanently prune a task by setting its mask to 0.
-        """
+        """Permanently prune task (set mask to 0)."""
         self.pruning_mask[task_id] = 0
-        print(f"[GumbelGate] Pruned task {task_id} (beta below threshold)")
 
     def keep_task(self, task_id):
-        """
-        Keep a task (set mask to 1).
-        """
+        """Keep task (ensure mask is 1)."""
         self.pruning_mask[task_id] = 1
-        print(f"[GumbelGate] Keeping task {task_id} (beta above threshold)")
 
 
 class ParameterWrapper(nn.Module):
@@ -503,7 +572,7 @@ class LoRA_ViT_timm(nn.Module):
             saved_lora_B['saved_B_'+str(i)] = torch.load(file_path)
 
         # Init GumbelGate for task selection (replaces scaling factors)
-        self.gumbel_gate = GumbelGate(max_tasks=20, init_alpha=0.8, init_logit=0.0)
+        self.gumbel_gate = GumbelGate(max_tasks=20, init_alpha=1.0, init_logit=0.0)
 
         # Load pruning mask from previous tasks (enables persistence)
         mask_path = self.save_file + 'pruning_mask.pt'
@@ -537,7 +606,7 @@ class LoRA_ViT_timm(nn.Module):
             if not eval:
                 blk.attn.qkv = _LoRA_qkv_timm_train(
                     w_qkv_linear, w_a_linear_q, w_b_linear_q, w_a_linear_v, w_b_linear_v,
-                    self.task_id, saved_lora_A, saved_lora_B, t_layer_i, self.rank, self.gumbel_gate, tau=self.tau, eval1=False
+                    self.task_id, saved_lora_A, saved_lora_B, t_layer_i, self.rank, self.gumbel_gate, tau=self.tau
                 )
             else:
                 blk.attn.qkv = _LoRA_qkv_timm_eval(self.task_id, w_qkv_linear, saved_lora_A, saved_lora_B, t_layer_i, self.rank, self.gumbel_gate, self.save_file) 

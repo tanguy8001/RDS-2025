@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH --output=/cluster/home/tdieudonne/SD-Lora-CL/logs/lora_cl_%j.out
+#SBATCH --output=/cluster/home/tdieudonne/Lora-CL/logs/lora_cl_%j.out
 #SBATCH --time=24:00:00
 #SBATCH --gpus-per-node=1
 #SBATCH --partition=gpupr.24h
-#SBATCH --gres=gpumem:38g
+#SBATCH --gres=gpumem:35g
 #SBATCH --cpus-per-task=4
 #SBATCH --mem-per-cpu=16g
 

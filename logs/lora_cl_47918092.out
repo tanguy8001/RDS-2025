@@ -272,7 +272,8 @@ Task 6, Epoch 3/5 => Loss 0.209 (clf=0.200, sparse=8.4887), tau=4.495, Train_acc
 Task 6, Epoch 4/5 => Loss 0.180 (clf=0.172, sparse=8.1265), tau=4.338, Train_accy 86.18:  60%|██████    | 3/5 [02:58<01:27, 44.00s/it]
 Task 6, Epoch 4/5 => Loss 0.180 (clf=0.172, sparse=8.1265), tau=4.338, Train_accy 86.18:  80%|████████  | 4/5 [02:58<00:41, 41.78s/it]
 Task 6, Epoch 5/5 => Loss 0.199 (clf=0.190, sparse=8.6570), tau=4.188, Train_accy 84.46:  80%|████████  | 4/5 [03:37<00:41, 41.78s/it]
-Task 6, Epoch 5/5 => Loss 0.199 (clf=0.190, sparse=8.6570), tau=4.188, Train_accy 84.46: 100%|██████████| 5/5 [03:37<00:00, 40.61s/it]Task 6, Epoch 5/5 => Loss 0.199 (clf=0.190, sparse=8.6570), tau=4.188, Train_accy 84.46: 100%|██████████| 5/5 [03:37<00:00, 43.41s/it]
+Task 6, Epoch 5/5 => Loss 0.199 (clf=0.190, sparse=8.6570), tau=4.188, Train_accy 84.46: 100%|██████████| 5/5 [03:37<00:00, 40.61s/it]
+Task 6, Epoch 5/5 => Loss 0.199 (clf=0.190, sparse=8.6570), tau=4.188, Train_accy 84.46: 100%|██████████| 5/5 [03:37<00:00, 43.41s/it]
 2025-11-06 10:20:00,023 [sdlora.py] => Task 6, Epoch 5/5 => Loss 0.199 (clf=0.190, sparse=8.6570), tau=4.188, Train_accy 84.46
 2025-11-06 10:20:00,025 [sdlora.py] => 
 [Conditional Growth] Task 6 - Beta values: [0.26905048 0.         0.10560933 0.16685109 0.11719188 0.1746306
@@ -298,4 +299,96 @@ task 7
 save_file ./CF100/
 [GumbelGate] Loaded pruning mask: 1 adapters already pruned
 2025-11-06 10:20:26,336 [sdlora.py] => [Gumbel CL-LoRA] tau_init=5.0, tau_final=0.5, anneal_rate=0.999, lambda_sparsity=0.001
-  0%|          | 0/5 [00:00<?, ?it/s]Task 7, Epoch 1/5 => Loss 0.743 (clf=0.734, sparse=8.8377), tau=4.828, Train_accy 40.68, Test_accy 74.81:   0%|          | 0/5 [01:09<?, ?it/s]Task 7, Epoch 1/5 => Loss 0.743 (clf=0.734, sparse=8.8377), tau=4.828, Train_accy 40.68, Test_accy 74.81:  20%|██        | 1/5 [01:09<04:36, 69.23s/it]Task 7, Epoch 2/5 => Loss 0.343 (clf=0.334, sparse=8.3430), tau=4.658, Train_accy 68.28:  20%|██        | 1/5 [01:49<04:36, 69.23s/it]                 Task 7, Epoch 2/5 => Loss 0.343 (clf=0.334, sparse=8.3430), tau=4.658, Train_accy 68.28:  40%|████      | 2/5 [01:49<02:36, 52.09s/it]
+
+  0%|          | 0/5 [00:00<?, ?it/s]
+Task 7, Epoch 1/5 => Loss 0.743 (clf=0.734, sparse=8.8377), tau=4.828, Train_accy 40.68, Test_accy 74.81:   0%|          | 0/5 [01:09<?, ?it/s]
+Task 7, Epoch 1/5 => Loss 0.743 (clf=0.734, sparse=8.8377), tau=4.828, Train_accy 40.68, Test_accy 74.81:  20%|██        | 1/5 [01:09<04:36, 69.23s/it]
+Task 7, Epoch 2/5 => Loss 0.343 (clf=0.334, sparse=8.3430), tau=4.658, Train_accy 68.28:  20%|██        | 1/5 [01:49<04:36, 69.23s/it]                 
+Task 7, Epoch 2/5 => Loss 0.343 (clf=0.334, sparse=8.3430), tau=4.658, Train_accy 68.28:  40%|████      | 2/5 [01:49<02:36, 52.09s/it]
+Task 7, Epoch 3/5 => Loss 0.288 (clf=0.279, sparse=9.1639), tau=4.495, Train_accy 65.46:  40%|████      | 2/5 [02:29<02:36, 52.09s/it]
+Task 7, Epoch 3/5 => Loss 0.288 (clf=0.279, sparse=9.1639), tau=4.495, Train_accy 65.46:  60%|██████    | 3/5 [02:29<01:33, 46.68s/it]
+Task 7, Epoch 4/5 => Loss 0.271 (clf=0.263, sparse=8.7222), tau=4.338, Train_accy 65.68:  60%|██████    | 3/5 [03:09<01:33, 46.68s/it]
+Task 7, Epoch 4/5 => Loss 0.271 (clf=0.263, sparse=8.7222), tau=4.338, Train_accy 65.68:  80%|████████  | 4/5 [03:09<00:44, 44.06s/it]
+Task 7, Epoch 5/5 => Loss 0.271 (clf=0.262, sparse=9.2330), tau=4.188, Train_accy 66.36:  80%|████████  | 4/5 [03:49<00:44, 44.06s/it]
+Task 7, Epoch 5/5 => Loss 0.271 (clf=0.262, sparse=9.2330), tau=4.188, Train_accy 66.36: 100%|██████████| 5/5 [03:49<00:00, 42.68s/it]
+Task 7, Epoch 5/5 => Loss 0.271 (clf=0.262, sparse=9.2330), tau=4.188, Train_accy 66.36: 100%|██████████| 5/5 [03:49<00:00, 45.97s/it]
+2025-11-06 10:24:16,179 [sdlora.py] => Task 7, Epoch 5/5 => Loss 0.271 (clf=0.262, sparse=9.2330), tau=4.188, Train_accy 66.36
+2025-11-06 10:24:16,183 [sdlora.py] => 
+[Conditional Growth] Task 7 - Beta values: [0.2673744  0.         0.03922299 0.18006593 0.07454473 0.18436861
+ 0.11156625 0.14285715]
+2025-11-06 10:24:16,183 [sdlora.py] => [Conditional Growth] Pruning threshold: 1.0e-06 (sparsemax zeros)
+2025-11-06 10:24:16,184 [sdlora.py] => [Conditional Growth] Active: 7/8 (87.5%)
+2025-11-06 10:24:16,184 [sdlora.py] => [Conditional Growth] 🎯 Sublinear growth: 1 adapters pruned
+2025-11-06 10:24:16,186 [sdlora.py] => [Conditional Growth] Pruning mask saved to ./CF100/pruning_mask.pt
+2025-11-06 10:24:45,612 [trainer.py] => No NME accuracy.
+2025-11-06 10:24:45,612 [trainer.py] => CNN: {'total': np.float64(76.12), '00-09': np.float64(0.0), '10-19': np.float64(87.9), '20-29': np.float64(94.0), '30-39': np.float64(89.4), '40-49': np.float64(86.4), '50-59': np.float64(80.8), '60-69': np.float64(93.2), '70-79': np.float64(77.3), 'old': np.float64(75.96), 'new': np.float64(77.3)}
+2025-11-06 10:24:45,612 [trainer.py] => CNN top1 curve: [np.float64(49.5), np.float64(63.6), np.float64(70.8), np.float64(73.4), np.float64(75.18), np.float64(76.94), np.float64(76.12)]
+2025-11-06 10:24:45,612 [trainer.py] => CNN top5 curve: [np.float64(67.05), np.float64(71.17), np.float64(76.1), np.float64(79.7), np.float64(82.55), np.float64(84.69), np.float64(86.35)]
+
+Average Accuracy (CNN): 69.36285714285714
+2025-11-06 10:24:45,612 [trainer.py] => Average Accuracy (CNN): 69.36285714285714 
+
+task 8
+2025-11-06 10:24:45,614 [trainer.py] => All params: 172027512
+2025-11-06 10:24:45,616 [trainer.py] => Trainable params: 430200
+2025-11-06 10:24:45,617 [sdlora.py] => Learning on 80-90
+2025-11-06 10:24:46,582 [_builder.py] => Loading pretrained weights from Hugging Face hub (timm/vit_base_patch16_224.augreg2_in21k_ft_in1k)
+2025-11-06 10:24:46,754 [_hub.py] => [timm/vit_base_patch16_224.augreg2_in21k_ft_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+save_file ./CF100/
+[GumbelGate] Loaded pruning mask: 1 adapters already pruned
+2025-11-06 10:24:47,117 [sdlora.py] => [Gumbel CL-LoRA] tau_init=5.0, tau_final=0.5, anneal_rate=0.999, lambda_sparsity=0.001
+  0%|          | 0/5 [00:00<?, ?it/s]Task 8, Epoch 1/5 => Loss 0.678 (clf=0.669, sparse=9.6758), tau=4.828, Train_accy 48.54, Test_accy 74.78:   0%|          | 0/5 [01:15<?, ?it/s]Task 8, Epoch 1/5 => Loss 0.678 (clf=0.669, sparse=9.6758), tau=4.828, Train_accy 48.54, Test_accy 74.78:  20%|██        | 1/5 [01:15<05:03, 75.82s/it]Task 8, Epoch 2/5 => Loss 0.328 (clf=0.319, sparse=8.9285), tau=4.658, Train_accy 73.82:  20%|██        | 1/5 [01:57<05:03, 75.82s/it]                 Task 8, Epoch 2/5 => Loss 0.328 (clf=0.319, sparse=8.9285), tau=4.658, Train_accy 73.82:  40%|████      | 2/5 [01:57<02:46, 55.63s/it]Task 8, Epoch 3/5 => Loss 0.290 (clf=0.281, sparse=8.9819), tau=4.495, Train_accy 73.96:  40%|████      | 2/5 [02:38<02:46, 55.63s/it]Task 8, Epoch 3/5 => Loss 0.290 (clf=0.281, sparse=8.9819), tau=4.495, Train_accy 73.96:  60%|██████    | 3/5 [02:38<01:38, 49.26s/it]Task 8, Epoch 4/5 => Loss 0.264 (clf=0.255, sparse=8.8030), tau=4.338, Train_accy 72.72:  60%|██████    | 3/5 [03:21<01:38, 49.26s/it]Task 8, Epoch 4/5 => Loss 0.264 (clf=0.255, sparse=8.8030), tau=4.338, Train_accy 72.72:  80%|████████  | 4/5 [03:21<00:46, 46.52s/it]Task 8, Epoch 5/5 => Loss 0.284 (clf=0.275, sparse=8.8008), tau=4.188, Train_accy 72.78:  80%|████████  | 4/5 [04:03<00:46, 46.52s/it]Task 8, Epoch 5/5 => Loss 0.284 (clf=0.275, sparse=8.8008), tau=4.188, Train_accy 72.78: 100%|██████████| 5/5 [04:03<00:00, 44.82s/it]Task 8, Epoch 5/5 => Loss 0.284 (clf=0.275, sparse=8.8008), tau=4.188, Train_accy 72.78: 100%|██████████| 5/5 [04:03<00:00, 48.63s/it]
+2025-11-06 10:28:50,252 [sdlora.py] => Task 8, Epoch 5/5 => Loss 0.284 (clf=0.275, sparse=8.8008), tau=4.188, Train_accy 72.78
+2025-11-06 10:28:50,254 [sdlora.py] => 
+[Conditional Growth] Task 8 - Beta values: [0.25203583 0.         0.07590029 0.1267746  0.06167535 0.1173228
+ 0.11450884 0.12678233 0.125     ]
+2025-11-06 10:28:50,254 [sdlora.py] => [Conditional Growth] Pruning threshold: 1.0e-06 (sparsemax zeros)
+2025-11-06 10:28:50,255 [sdlora.py] => [Conditional Growth] Active: 8/9 (88.9%)
+2025-11-06 10:28:50,255 [sdlora.py] => [Conditional Growth] 🎯 Sublinear growth: 1 adapters pruned
+2025-11-06 10:28:50,256 [sdlora.py] => [Conditional Growth] Pruning mask saved to ./CF100/pruning_mask.pt
+2025-11-06 10:29:24,438 [trainer.py] => No NME accuracy.
+2025-11-06 10:29:24,438 [trainer.py] => CNN: {'total': np.float64(75.9), '00-09': np.float64(0.0), '10-19': np.float64(86.0), '20-29': np.float64(92.4), '30-39': np.float64(88.9), '40-49': np.float64(84.6), '50-59': np.float64(78.1), '60-69': np.float64(92.6), '70-79': np.float64(73.0), '80-89': np.float64(87.5), 'old': np.float64(74.45), 'new': np.float64(87.5)}
+2025-11-06 10:29:24,438 [trainer.py] => CNN top1 curve: [np.float64(49.5), np.float64(63.6), np.float64(70.8), np.float64(73.4), np.float64(75.18), np.float64(76.94), np.float64(76.12), np.float64(75.9)]
+2025-11-06 10:29:24,438 [trainer.py] => CNN top5 curve: [np.float64(67.05), np.float64(71.17), np.float64(76.1), np.float64(79.7), np.float64(82.55), np.float64(84.69), np.float64(86.35), np.float64(87.37)]
+
+Average Accuracy (CNN): 70.17999999999999
+2025-11-06 10:29:24,438 [trainer.py] => Average Accuracy (CNN): 70.17999999999999 
+
+task 9
+2025-11-06 10:29:24,441 [trainer.py] => All params: 172035202
+2025-11-06 10:29:24,442 [trainer.py] => Trainable params: 437890
+2025-11-06 10:29:24,444 [sdlora.py] => Learning on 90-100
+2025-11-06 10:29:25,468 [_builder.py] => Loading pretrained weights from Hugging Face hub (timm/vit_base_patch16_224.augreg2_in21k_ft_in1k)
+2025-11-06 10:29:25,634 [_hub.py] => [timm/vit_base_patch16_224.augreg2_in21k_ft_in1k] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+save_file ./CF100/
+[GumbelGate] Loaded pruning mask: 1 adapters already pruned
+2025-11-06 10:29:26,026 [sdlora.py] => [Gumbel CL-LoRA] tau_init=5.0, tau_final=0.5, anneal_rate=0.999, lambda_sparsity=0.001
+  0%|          | 0/5 [00:00<?, ?it/s]Task 9, Epoch 1/5 => Loss 0.717 (clf=0.708, sparse=9.1053), tau=4.828, Train_accy 50.76, Test_accy 75.03:   0%|          | 0/5 [01:22<?, ?it/s]Task 9, Epoch 1/5 => Loss 0.717 (clf=0.708, sparse=9.1053), tau=4.828, Train_accy 50.76, Test_accy 75.03:  20%|██        | 1/5 [01:22<05:30, 82.63s/it]Task 9, Epoch 2/5 => Loss 0.353 (clf=0.344, sparse=9.6040), tau=4.658, Train_accy 73.88:  20%|██        | 1/5 [02:05<05:30, 82.63s/it]                 Task 9, Epoch 2/5 => Loss 0.353 (clf=0.344, sparse=9.6040), tau=4.658, Train_accy 73.88:  40%|████      | 2/5 [02:05<02:58, 59.53s/it]Task 9, Epoch 3/5 => Loss 0.319 (clf=0.309, sparse=9.5812), tau=4.495, Train_accy 72.60:  40%|████      | 2/5 [02:50<02:58, 59.53s/it]Task 9, Epoch 3/5 => Loss 0.319 (clf=0.309, sparse=9.5812), tau=4.495, Train_accy 72.60:  60%|██████    | 3/5 [02:50<01:45, 52.56s/it]Task 9, Epoch 4/5 => Loss 0.318 (clf=0.309, sparse=9.2292), tau=4.338, Train_accy 71.46:  60%|██████    | 3/5 [03:34<01:45, 52.56s/it]Task 9, Epoch 4/5 => Loss 0.318 (clf=0.309, sparse=9.2292), tau=4.338, Train_accy 71.46:  80%|████████  | 4/5 [03:34<00:49, 49.09s/it]Task 9, Epoch 5/5 => Loss 0.284 (clf=0.276, sparse=8.9268), tau=4.188, Train_accy 71.22:  80%|████████  | 4/5 [04:17<00:49, 49.09s/it]Task 9, Epoch 5/5 => Loss 0.284 (clf=0.276, sparse=8.9268), tau=4.188, Train_accy 71.22: 100%|██████████| 5/5 [04:17<00:00, 47.21s/it]Task 9, Epoch 5/5 => Loss 0.284 (clf=0.276, sparse=8.9268), tau=4.188, Train_accy 71.22: 100%|██████████| 5/5 [04:17<00:00, 51.58s/it]
+2025-11-06 10:33:43,919 [sdlora.py] => Task 9, Epoch 5/5 => Loss 0.284 (clf=0.276, sparse=8.9268), tau=4.188, Train_accy 71.22
+2025-11-06 10:33:43,921 [sdlora.py] => 
+[Conditional Growth] Task 9 - Beta values: [0.21840034 0.         0.08655789 0.15566687 0.07158884 0.08500433
+ 0.06913294 0.07600577 0.12653197 0.11111112]
+2025-11-06 10:33:43,921 [sdlora.py] => [Conditional Growth] Pruning threshold: 1.0e-06 (sparsemax zeros)
+2025-11-06 10:33:43,922 [sdlora.py] => [Conditional Growth] Active: 9/10 (90.0%)
+2025-11-06 10:33:43,922 [sdlora.py] => [Conditional Growth] 🎯 Sublinear growth: 1 adapters pruned
+2025-11-06 10:33:43,924 [sdlora.py] => [Conditional Growth] Pruning mask saved to ./CF100/pruning_mask.pt
+2025-11-06 10:34:23,298 [trainer.py] => No NME accuracy.
+2025-11-06 10:34:23,299 [trainer.py] => CNN: {'total': np.float64(76.73), '00-09': np.float64(0.0), '10-19': np.float64(85.8), '20-29': np.float64(92.0), '30-39': np.float64(88.3), '40-49': np.float64(84.8), '50-59': np.float64(78.3), '60-69': np.float64(91.9), '70-79': np.float64(73.4), '80-89': np.float64(86.8), '90-99': np.float64(86.0), 'old': np.float64(75.7), 'new': np.float64(86.0)}
+2025-11-06 10:34:23,299 [trainer.py] => CNN top1 curve: [np.float64(49.5), np.float64(63.6), np.float64(70.8), np.float64(73.4), np.float64(75.18), np.float64(76.94), np.float64(76.12), np.float64(75.9), np.float64(76.73)]
+2025-11-06 10:34:23,299 [trainer.py] => CNN top5 curve: [np.float64(67.05), np.float64(71.17), np.float64(76.1), np.float64(79.7), np.float64(82.55), np.float64(84.69), np.float64(86.35), np.float64(87.37), np.float64(88.24)]
+
+Average Accuracy (CNN): 70.90777777777777
+2025-11-06 10:34:23,299 [trainer.py] => Average Accuracy (CNN): 70.90777777777777 
+
+Accuracy Matrix (CNN):
+[[ 1.5  0.3  0.2  0.1  0.1  0.1  0.   0.   0.   0. ]
+ [97.5 93.9 93.5 90.2 90.  88.1 87.9 86.  85.8  0. ]
+ [ 0.  96.6 95.8 94.5 93.6 93.8 94.  92.4 92.   0. ]
+ [ 0.   0.  93.7 90.1 90.3 89.1 89.4 88.9 88.3  0. ]
+ [ 0.   0.   0.  92.1 90.2 89.7 86.4 84.6 84.8  0. ]
+ [ 0.   0.   0.   0.  86.9 82.  80.8 78.1 78.3  0. ]
+ [ 0.   0.   0.   0.   0.  95.8 93.2 92.6 91.9  0. ]
+ [ 0.   0.   0.   0.   0.   0.  77.3 73.  73.4  0. ]
+ [ 0.   0.   0.   0.   0.   0.   0.  87.5 86.8  0. ]
+ [ 0.   0.   0.   0.   0.   0.   0.   0.  86.   0. ]]
+2025-11-06 10:34:23,300 [trainer.py] => Forgetting (CNN): 80.9888888888889

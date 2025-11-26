@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from utils.inc_net import IncrementalNet
 from models.base import BaseLearner
 from utils.toolkit import target2onehot, tensor2numpy
-from utils.gumbel_utils import TemperatureScheduler
+from utils.gumbel_utils import TemperatureScheduler, sparsity_loss
 
 import timm
 from backbone.lora import LoRA_ViT_timm
@@ -215,74 +215,98 @@ class Learner(BaseLearner):
         logging.info(info)
 
     def _update_representation(self, train_loader, test_loader, optimizer, scheduler):
-        # Initialize temperature scheduler for Gumbel-Sparsemax
-        tau_init = self.args.get("gumbel_tau_init", 5.0)
-        tau_final = self.args.get("gumbel_tau_final", 0.5)
-        anneal_rate = self.args.get("gumbel_anneal_rate", 0.999)
-        lambda_sparsity = self.args.get("lambda_sparsity", 0.01)
+        backbone = self._network.module.backbone if len(self._multiple_gpus) > 1 else self._network.backbone
+        gumbel_gate = backbone.gumbel_gate
+        task_indices = list(range(self._cur_task + 1))
 
-        temp_scheduler = TemperatureScheduler(
-            tau_init=tau_init, tau_final=tau_final, anneal_rate=anneal_rate
+        tau_init = self.args["gumbel_tau_init"]
+        tau_final = self.args["gumbel_tau_final"]
+        anneal_rate = self.args["gumbel_anneal_rate"]
+        temp_scheduler = TemperatureScheduler(tau_init, tau_final, anneal_rate)
+        total_epochs = self.args["epochs"]
+        phase1_epochs = int(0.6 * total_epochs)  # TODO: 60% for selection learning, needs to be adjusted. 2 forward passes..?
+        phase2_epochs = total_epochs - phase1_epochs
+        lambda_sparsity = self.args["lambda_sparsity"]
+
+        logging.info(f"[Two-Phase Training] Task {self._cur_task}: Phase 1 (selection) = {phase1_epochs} epochs, "
+                    f"Phase 2 (magnitude) = {phase2_epochs} epochs")
+
+        # Learn Selection (freeze alphas, train logits)
+        logging.info(f"[Phase 1] Learning selection (α fixed, l trainable)")
+        gumbel_gate.freeze_alphas(task_indices)
+        gumbel_gate.unfreeze_logits(task_indices)
+
+        self._train_phase(train_loader, test_loader, optimizer, scheduler, temp_scheduler,
+                         lambda_sparsity, phase=1, epochs=phase1_epochs)
+
+        # Learn Magnitudes (freeze logits, train alphas)
+        logging.info(f"[Phase 2] Learning magnitudes (α trainable, l fixed)")
+        gumbel_gate.freeze_logits(task_indices)
+        gumbel_gate.unfreeze_alphas(task_indices)
+
+        optimizer_p2 = optim.SGD(
+            filter(lambda p: p.requires_grad, self._network.parameters()),
+            lr=self.args["alpha_lr"],
+            momentum=0.9
+        )
+        scheduler_p2 = optim.lr_scheduler.MultiStepLR(
+            optimizer=optimizer_p2,
+            milestones=[int(0.6 * phase2_epochs), int(0.8 * phase2_epochs)],
+            gamma=self.args["lrate_decay"] if self.args["lrate_decay"] > 0 else 0.5
         )
 
-        logging.info(f"[Gumbel CL-LoRA] tau_init={tau_init}, tau_final={tau_final}, "
-                    f"anneal_rate={anneal_rate}, lambda_sparsity={lambda_sparsity}")
+        logging.info(f"[Phase 2] Alpha learning rate: {self.args["alpha_lr"]:.2e} (base lr: {self.args['lrate']:.2e})")
 
-        prog_bar = tqdm(range(self.args["epochs"]))
-        for _, epoch in enumerate(prog_bar):
+        self._train_phase(train_loader, test_loader, optimizer_p2, scheduler_p2, temp_scheduler,
+                         lambda_sparsity, phase=2, epochs=phase2_epochs)
+
+        # Conditional growth decision
+        self._conditional_growth_decision()
+
+    def _train_phase(self, train_loader, test_loader, optimizer, scheduler, temp_scheduler,
+                     lambda_sparsity, phase, epochs):
+        """Train for one phase (either selection or magnitude learning)."""
+        backbone = self._network.module.backbone if len(self._multiple_gpus) > 1 else self._network.backbone
+        blocks = backbone.lora_vit.blocks
+
+        prog_bar = tqdm(range(epochs), desc=f"Phase {phase}")
+        for epoch in prog_bar:
             self._network.train()
-            losses = 0.0
-            losses_clf = 0.0
-            losses_sparsity = 0.0
-            correct, total = 0, 0
+            losses, correct, total = 0.0, 0, 0
 
-            for i, (_, inputs, targets) in enumerate(train_loader):
-                # Get current temperature
+            for _, inputs, targets in train_loader:
                 tau = temp_scheduler.step()
-
-                # Update tau in backbone (needed for forward pass)
-                if len(self._multiple_gpus) > 1:
-                    self._network.module.backbone.tau = tau
-                else:
-                    self._network.backbone.tau = tau
+                backbone.tau = tau
 
                 inputs, targets = inputs.to(self._device), targets.to(self._device)
-                logits, ortho_loss = self._network(inputs, ortho_loss=True)
-                logits = logits['logits']
+                logits = self._network(inputs, ortho_loss=True)[0]['logits']
 
                 # Classification loss
                 fake_targets = targets - self._known_classes
-                loss_clf = F.cross_entropy(
-                    logits[:, self._known_classes :], fake_targets
-                )
+                loss_clf = F.cross_entropy(logits[:, self._known_classes:], fake_targets)
 
-                # Sparsity regularization loss (Equation 3)
-                # Collect sparsity losses from all LoRA layers
-                sparsity_loss_total = 0
-                if len(self._multiple_gpus) > 1:
-                    backbone = self._network.module.backbone
-                else:
-                    backbone = self._network.backbone
+                # Sparsity loss (only in Phase 1 - selection learning)
+                loss_sparsity = 0
+                if phase == 1:
+                    num_layers = 0
+                    for blk in blocks:
+                        qkv_layer = blk.attn.qkv
+                        if hasattr(qkv_layer, 'last_beta_q') and qkv_layer.last_beta_q is not None:
+                            loss_sparsity += sparsity_loss(qkv_layer.last_beta_q)
+                            loss_sparsity += sparsity_loss(qkv_layer.last_beta_v)
+                            num_layers += 1
+                    if num_layers > 0:
+                        loss_sparsity = loss_sparsity / (2 * num_layers)
 
-                # Iterate through LoRA layers to collect sparsity loss
-                for blk in backbone.lora_vit.blocks:
-                    if hasattr(blk.attn.qkv, 'get_sparsity_loss'):
-                        sparsity_loss_total += blk.attn.qkv.get_sparsity_loss()
-
-                # Total loss (Equation 3 from paper)
-                # loss = loss_clf + lambda_sparsity * sparsity_loss + ortho_weight * ortho_loss
-                loss = loss_clf + lambda_sparsity * sparsity_loss_total
+                loss = loss_clf + lambda_sparsity * loss_sparsity
 
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
 
                 losses += loss.item()
-                losses_clf += loss_clf.item()
-                losses_sparsity += sparsity_loss_total.item() if isinstance(sparsity_loss_total, torch.Tensor) else 0
-
                 _, preds = torch.max(logits, dim=1)
-                correct += preds.eq(targets.expand_as(preds)).cpu().sum()
+                correct += preds.eq(targets).cpu().sum()
                 total += len(targets)
 
             scheduler.step()
@@ -290,94 +314,80 @@ class Learner(BaseLearner):
 
             if epoch % 5 == 0:
                 test_acc = self._compute_accuracy(self._network, test_loader)
-                info = "Task {}, Epoch {}/{} => Loss {:.3f} (clf={:.3f}, sparse={:.4f}), tau={:.3f}, Train_accy {:.2f}, Test_accy {:.2f}".format(
-                    self._cur_task,
-                    epoch + 1,
-                    self.args["epochs"],
-                    losses / len(train_loader),
-                    losses_clf / len(train_loader),
-                    losses_sparsity / len(train_loader),
-                    tau,
-                    train_acc,
-                    test_acc,
-                )
+                info = f"Phase {phase}, Epoch {epoch+1}/{epochs} => Loss {losses/len(train_loader):.3f}, " \
+                       f"tau={tau:.3f}, Train {train_acc:.2f}%, Test {test_acc:.2f}%"
             else:
-                info = "Task {}, Epoch {}/{} => Loss {:.3f} (clf={:.3f}, sparse={:.4f}), tau={:.3f}, Train_accy {:.2f}".format(
-                    self._cur_task,
-                    epoch + 1,
-                    self.args["epochs"],
-                    losses / len(train_loader),
-                    losses_clf / len(train_loader),
-                    losses_sparsity / len(train_loader),
-                    tau,
-                    train_acc,
-                )
+                info = f"Phase {phase}, Epoch {epoch+1}/{epochs} => Loss {losses/len(train_loader):.3f}, " \
+                       f"tau={tau:.3f}, Train {train_acc:.2f}%"
+
             prog_bar.set_description(info)
 
         logging.info(info)
 
-        # Conditional growth decision (Equation 4)
-        self._conditional_growth_decision()
-
     def _conditional_growth_decision(self):
         """
-        Conditional growth mechanism: Trust sparsemax to identify useful adapters.
+        Conditional growth using multiple Gumbel sampling for robust pruning decisions.
 
-        Sparsemax learns which adapters are useful and sets others to zero.
-        We make those zeros permanent to save memory (sublinear growth).
+        Uses 10 samples to measure selection frequency - prunes if rarely selected.
         """
-        # Trust sparsemax: only prune true zeros (plus small epsilon for numerical stability)
-        threshold = self.args.get("growth_threshold", 1e-6)
-        tau_eval = self.args.get("gumbel_tau_final", 0.5)
-
-        # Get backbone
-        if len(self._multiple_gpus) > 1:
-            backbone = self._network.module.backbone
-        else:
-            backbone = self._network.backbone
-
+        backbone = self._network.module.backbone if len(self._multiple_gpus) > 1 else self._network.backbone
         gumbel_gate = backbone.gumbel_gate
+        current_task = self._cur_task
+        task_indices = list(range(current_task + 1))
 
-        # Evaluate all task betas
-        task_indices = list(range(self._cur_task + 1))
-        beta_values = gumbel_gate.get_betas(task_indices, tau=tau_eval)
+        # Multiple sampling for robust decision
+        with torch.no_grad():
+            mean_betas, selection_freq = gumbel_gate.get_selection_frequency(
+                task_indices, tau=0.5, num_samples=10
+            )
 
-        logging.info(f"\n[Conditional Growth] Task {self._cur_task} - Beta values: {beta_values.detach().cpu().numpy()}")
-        logging.info(f"[Conditional Growth] Pruning threshold: {threshold:.1e} (sparsemax zeros)")
+        current_freq = selection_freq[-1].item()
 
-        # Prune adapters where sparsemax → 0
-        num_pruned = 0
-        for i, task_idx in enumerate(task_indices):
-            beta_val = beta_values[i].item()
+        # === Pruning decision based on selection frequency ===
+        prune_threshold = self.args.get("prune_threshold", 0.2)
 
-            # Skip already pruned
-            if gumbel_gate.pruning_mask[task_idx] == 0:
-                continue
+        logging.info(f"\n{'='*60}")
+        logging.info(f"[Conditional Growth] Task {current_task}")
+        logging.info(f"{'='*60}")
+        logging.info(f"{'Task':<6} {'α':<8} {'logit':<8} {'β_mean':<10} {'freq':<8} {'Decision':<10}")
+        logging.info("-" * 60)
 
-            if beta_val < threshold:
-                # Sparsemax set to zero → prune permanently
-                gumbel_gate.prune_task(task_idx)
-                num_pruned += 1
-                logging.info(f"[Conditional Growth] ✗ Pruned task {task_idx} (beta={beta_val:.6f} ≈ 0)")
+        for idx, task_idx in enumerate(task_indices):
+            alpha = gumbel_gate.alpha[task_idx].item()
+            logit = gumbel_gate.gate_logits[task_idx].item()
+            beta = mean_betas[idx].item()
+            freq = selection_freq[idx].item()
 
-        # Statistics
-        num_active = (gumbel_gate.pruning_mask[:self._cur_task+1] > 0).sum().item()
-        num_total = self._cur_task + 1
-        logging.info(f"[Conditional Growth] Active: {num_active}/{num_total} ({100*num_active/num_total:.1f}%)")
+            if task_idx == current_task:
+                decision = "✗ PRUNE" if current_freq < prune_threshold else "✓ KEEP"
+                logging.info(f"{task_idx:<6} {alpha:<8.3f} {logit:<8.3f} {beta:<10.4f} {freq:<8.2f} {decision:<10}")
+            else:
+                mask = int(gumbel_gate.pruning_mask[task_idx].item())
+                logging.info(f"{task_idx:<6} {alpha:<8.3f} {logit:<8.3f} {beta:<10.4f} {freq:<8.2f} mask={mask}")
 
-        if num_active < num_total:
-            logging.info(f"[Conditional Growth] 🎯 Sublinear growth: {num_total - num_active} adapters pruned")
+        # Make decision
+        if current_freq < prune_threshold:
+            gumbel_gate.prune_task(current_task)
+            logging.info(f"\n✗ PRUNED: freq={current_freq:.2f} < {prune_threshold}")
+        else:
+            gumbel_gate.keep_task(current_task)
+            logging.info(f"\n✓ KEPT: freq={current_freq:.2f} >= {prune_threshold}")
 
-        # Save pruning mask for next task (CRITICAL: persistence across tasks)
+        gumbel_gate.freeze_task_parameters(current_task)
+
+        # Summary
+        num_active = (gumbel_gate.pruning_mask[:current_task + 1] > 0).sum().item()
+        logging.info(f"Active: {num_active}/{current_task + 1} adapters")
+
+        # Save state
         mask_path = self.args['filepath'] + 'pruning_mask.pt'
         torch.save(gumbel_gate.pruning_mask.cpu(), mask_path)
-        logging.info(f"[Conditional Growth] Pruning mask saved to {mask_path}")
 
-        # Save beta values for analysis
-        beta_path = self.args['filepath'] + f'beta_values_task_{self._cur_task}.pt'
+        state_path = self.args['filepath'] + f'gumbel_gate_task_{current_task}.pt'
         torch.save({
-            'beta_values': beta_values.detach().cpu(),
-            'task_indices': task_indices,
+            'alphas': [gumbel_gate.alpha[i].detach().cpu() for i in range(current_task + 1)],
+            'gate_logits': [gumbel_gate.gate_logits[i].detach().cpu() for i in range(current_task + 1)],
             'pruning_mask': gumbel_gate.pruning_mask.cpu(),
-            'threshold': threshold,
-        }, beta_path)
+            'task_id': current_task,
+        }, state_path)
+        logging.info(f"{'='*60}\n")
