@@ -15,12 +15,12 @@
     "min_lr": 5e-3,
     "tuned_epoch": 20,
     "filepath": "./CF100/",
-    "init_epoch": 15,
+    "init_epoch": 7,
     "init_lr": 8e-3,
     "init_milestones": [60, 120, 170],
     "init_lr_decay": 0.1,
     "init_weight_decay": 0.0005,
-    "epochs": 15,
+    "epochs": 7,
     "lrate": 8e-3,
     "milestones": [40, 70],
     "lrate_decay": 0,
@@ -35,5 +35,6 @@
     "prune_threshold": 0.2,
 
     "_comment_phases": "Two-phase training: 60% for selection, 40% for magnitude",
-    "alpha_lr": 0.1
+    "alpha_lr": 0.02,
+    "lambda_alpha": 0.01
 }

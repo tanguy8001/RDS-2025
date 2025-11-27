@@ -260,7 +260,7 @@ class Learner(BaseLearner):
         self._train_phase(train_loader, test_loader, optimizer_p2, scheduler_p2, temp_scheduler,
                          lambda_sparsity, phase=2, epochs=phase2_epochs)
 
-        # Conditional growth decision
+        # Cond° growth decision
         self._conditional_growth_decision()
 
     def _train_phase(self, train_loader, test_loader, optimizer, scheduler, temp_scheduler,
@@ -268,6 +268,9 @@ class Learner(BaseLearner):
         """Train for one phase (either selection or magnitude learning)."""
         backbone = self._network.module.backbone if len(self._multiple_gpus) > 1 else self._network.backbone
         blocks = backbone.lora_vit.blocks
+        gumbel_gate = backbone.gumbel_gate
+
+        lambda_alpha = self.args["lambda_alpha"]
 
         prog_bar = tqdm(range(epochs), desc=f"Phase {phase}")
         for epoch in prog_bar:
@@ -285,20 +288,28 @@ class Learner(BaseLearner):
                 fake_targets = targets - self._known_classes
                 loss_clf = F.cross_entropy(logits[:, self._known_classes:], fake_targets)
 
-                # Sparsity loss (only in Phase 1 - selection learning)
-                loss_sparsity = 0
+                # Reg losses
+                loss_reg = 0
+
+                # Phase 1: Sparsity reg (encourage sparse β selection)
                 if phase == 1:
                     num_layers = 0
                     for blk in blocks:
                         qkv_layer = blk.attn.qkv
                         if hasattr(qkv_layer, 'last_beta_q') and qkv_layer.last_beta_q is not None:
-                            loss_sparsity += sparsity_loss(qkv_layer.last_beta_q)
-                            loss_sparsity += sparsity_loss(qkv_layer.last_beta_v)
+                            loss_reg += sparsity_loss(qkv_layer.last_beta_q)
+                            loss_reg += sparsity_loss(qkv_layer.last_beta_v)
                             num_layers += 1
                     if num_layers > 0:
-                        loss_sparsity = loss_sparsity / (2 * num_layers)
+                        loss_reg = lambda_sparsity * (loss_reg / (2 * num_layers))
 
-                loss = loss_clf + lambda_sparsity * loss_sparsity
+                # Phase 2: Alpha magnitude reg (prevent overgrowth <=> forgetting)
+                elif phase == 2:
+                    task_indices = list(range(self._cur_task + 1))
+                    alpha_l2 = sum(gumbel_gate.alpha[i] ** 2 for i in task_indices)
+                    loss_reg = lambda_alpha * alpha_l2
+
+                loss = loss_clf + loss_reg
 
                 optimizer.zero_grad()
                 loss.backward()
