@@ -6,17 +6,22 @@ Joint learning of selection parameters (β via logits) and magnitude parameters 
 ## Solution
 Two-phase training at each task separates selection learning from magnitude calibration.
 
-### Phase 1: Learn Selection (70% of epochs)
-- **Freeze**: α parameters (fixed at 1.0)
+### Phase 1: Learn Selection (60% of epochs)
+- **Freeze**:
+  - α parameters (fixed at 1.0)
+  - **New task's LoRA adapters (A, B)** ← frozen at initialization
 - **Train**: Gate logits (l) → learns β via Gumbel-Sparsemax
 - **Loss**: Classification + Sparsity regularization
-- **Goal**: Learn *which* adapters to select based on task similarity
+- **Goal**: Learn *which old adapters to reuse* for new task (pure selection)
 
-### Phase 2: Learn Magnitudes (30% of epochs)
-- **Freeze**: Gate logits (l) → fixes β selection
-- **Train**: α parameters
-- **Loss**: Classification only (no sparsity)
-- **Goal**: Learn *how much* to scale each selected adapter
+### Phase 2: Learn New Task (40% of epochs)
+- **Freeze**: Gate logits (l) → fixes β selection from Phase 1
+- **Train**:
+  - α parameters (magnitude scaling)
+  - **New task's LoRA adapters (A, B)** ← main learning happens here
+- **Loss**: Classification + Alpha L2 regularization (prevents α explosion)
+- **Goal**: Learn new task representation AND how much to scale it
+- **Optimizer**: Parameter groups with different LRs (LoRA: 8e-3, α: configurable)
 
 ## Pruning Decision
 Uses **multiple Gumbel sampling** (10 samples) for robust decisions:

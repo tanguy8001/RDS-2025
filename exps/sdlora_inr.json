@@ -1,12 +1,12 @@
 {
-    "prefix": "reproduce",
+    "prefix": "imagenetr",
     "dataset": "imagenetr",
     "memory_size": 0,
     "memory_per_class": 0,
     "fixed_memory": false,
     "shuffle": true,
-    "init_cls": 20,
-    "increment": 20,
+    "init_cls": 10,
+    "increment": 10,
     "model_name": "sdlora",
     "backbone_type": "vit_base_patch16_224",
     "device": ["0"],
@@ -25,5 +25,16 @@
     "milestones": [10000],
     "lrate_decay": 0,
     "batch_size": 128,
-    "weight_decay": 2e-4
+    "weight_decay": 2e-4,
+
+    "_comment_gumbel": "Gumbel CL-LoRA hyperparameters",
+    "gumbel_tau_init": 5.0,
+    "gumbel_tau_final": 0.5,
+    "gumbel_anneal_rate": 0.999,
+    "lambda_sparsity": 0.1,
+    "prune_threshold": 0.2,
+
+    "_comment_phases": "Two-phase training: XX% for selection, (100-XX)% for magnitude",
+    "alpha_lr": 0.02,
+    "lambda_alpha": 0.009
 }

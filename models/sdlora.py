@@ -112,11 +112,16 @@ class Learner(BaseLearner):
                 self._network = nn.DataParallel(self._network, self._multiple_gpus)       
             self._network.to(self._device) 
 
-            optimizer = optim.SGD(
+            #optimizer = optim.SGD(
+            #    self._network.parameters(),
+            #    lr=self.args["lrate"],
+            #    momentum=0.9,
+            #)  # 1e-5
+            optimizer = optim.AdamW(
                 self._network.parameters(),
                 lr=self.args["lrate"],
-                momentum=0.9,
-            )  # 1e-5
+                weight_decay=self.args["weight_decay"]
+            )
             scheduler = optim.lr_scheduler.MultiStepLR(
                 optimizer=optimizer, milestones=self.args["milestones"], gamma=self.args["lrate_decay"]
             )
@@ -224,38 +229,57 @@ class Learner(BaseLearner):
         anneal_rate = self.args["gumbel_anneal_rate"]
         temp_scheduler = TemperatureScheduler(tau_init, tau_final, anneal_rate)
         total_epochs = self.args["epochs"]
-        phase1_epochs = int(0.6 * total_epochs)  # TODO: 60% for selection learning, needs to be adjusted. 2 forward passes..?
+        #phase1_epochs = int(0.4 * total_epochs)  # TODO: 40% for selection learning, needs to be adjusted. 2 forward passes..?
+        phase1_epochs = 1
         phase2_epochs = total_epochs - phase1_epochs
         lambda_sparsity = self.args["lambda_sparsity"]
 
         logging.info(f"[Two-Phase Training] Task {self._cur_task}: Phase 1 (selection) = {phase1_epochs} epochs, "
                     f"Phase 2 (magnitude) = {phase2_epochs} epochs")
 
-        # Learn Selection (freeze alphas, train logits)
-        logging.info(f"[Phase 1] Learning selection (α fixed, l trainable)")
+        logging.info(f"[Phase 1] Learning selection (new adapter frozen, α frozen, l trainable)")
+
+        # Freeze new task's AB adapters
+        for param in backbone.w_As:
+            param.weight.requires_grad = False
+            param.weight.grad = None
+        for param in backbone.w_Bs:
+            param.weight.requires_grad = False
+            param.weight.grad = None
+
         gumbel_gate.freeze_alphas(task_indices)
         gumbel_gate.unfreeze_logits(task_indices)
 
         self._train_phase(train_loader, test_loader, optimizer, scheduler, temp_scheduler,
                          lambda_sparsity, phase=1, epochs=phase1_epochs)
 
-        # Learn Magnitudes (freeze logits, train alphas)
-        logging.info(f"[Phase 2] Learning magnitudes (α trainable, l fixed)")
+        logging.info(f"[Phase 2] Learning new task (new adapter trainable, α trainable, l frozen)")
+
+        # Unfreeze new task's AB adapters
+        for param in backbone.w_As:
+            param.weight.requires_grad = True
+        for param in backbone.w_Bs:
+            param.weight.requires_grad = True
+
         gumbel_gate.freeze_logits(task_indices)
         gumbel_gate.unfreeze_alphas(task_indices)
 
-        optimizer_p2 = optim.SGD(
-            filter(lambda p: p.requires_grad, self._network.parameters()),
-            lr=self.args["alpha_lr"],
-            momentum=0.9
-        )
+        # New optimizer for Phase 2 with param groups
+        alpha_params = [gumbel_gate.alpha[i] for i in task_indices]
+        lora_params = [p.weight for p in backbone.w_As + backbone.w_Bs]
+
+        optimizer_p2 = optim.SGD([
+            {'params': lora_params, 'lr': self.args["lrate"]},
+            {'params': alpha_params, 'lr': self.args["alpha_lr"]}
+        ], momentum=0.9)
+
         scheduler_p2 = optim.lr_scheduler.MultiStepLR(
             optimizer=optimizer_p2,
             milestones=[int(0.6 * phase2_epochs), int(0.8 * phase2_epochs)],
             gamma=self.args["lrate_decay"] if self.args["lrate_decay"] > 0 else 0.5
         )
 
-        logging.info(f'[Phase 2] Alpha learning rate: {self.args["alpha_lr"]:.2e} (base lr: {self.args["lrate"]:.2e})')
+        logging.info(f'[Phase 2] LoRA LR: {self.args["lrate"]:.2e}, Alpha LR: {self.args.get("alpha_lr", self.args["lrate"]):.2e}')
 
         self._train_phase(train_loader, test_loader, optimizer_p2, scheduler_p2, temp_scheduler,
                          lambda_sparsity, phase=2, epochs=phase2_epochs)
@@ -303,16 +327,19 @@ class Learner(BaseLearner):
                     if num_layers > 0:
                         loss_reg = lambda_sparsity * (loss_reg / (2 * num_layers))
 
-                # Phase 2: Alpha magnitude reg (prevent overgrowth <=> forgetting)
-                elif phase == 2:
-                    task_indices = list(range(self._cur_task + 1))
-                    alpha_l2 = sum(gumbel_gate.alpha[i] ** 2 for i in task_indices)
-                    loss_reg = lambda_alpha * alpha_l2
+                # Phase 2: No alpha regularization (let them learn freely)
+                # Use gradient clipping instead to prevent explosion
 
                 loss = loss_clf + loss_reg
 
                 optimizer.zero_grad()
                 loss.backward()
+
+                # Gradient clipping for alphas (prevents explosion without constraining values)
+                if phase == 2:
+                    alpha_params = [gumbel_gate.alpha[i] for i in range(self._cur_task + 1)]
+                    torch.nn.utils.clip_grad_norm_(alpha_params, max_norm=1.0)
+
                 optimizer.step()
 
                 losses += loss.item()
@@ -354,11 +381,13 @@ class Learner(BaseLearner):
 
         current_freq = selection_freq[-1].item()
 
-        # === Pruning decision based on selection frequency ===
-        prune_threshold = self.args.get("prune_threshold", 0.2)
+        # === Adaptive pruning threshold (scales with number of active tasks) ===
+        num_active = (gumbel_gate.pruning_mask[:current_task] > 0).sum().item() + 1  # +1 for current
+        adaptive_threshold = max(0.05, 0.2 / (num_active ** 0.5))  # Decreases as more tasks accumulate
+        prune_threshold = self.args.get("prune_threshold", adaptive_threshold)
 
         logging.info(f"\n{'='*60}")
-        logging.info(f"[Conditional Growth] Task {current_task}")
+        logging.info(f"[Conditional Growth] Task {current_task} | Threshold: {prune_threshold:.3f} (adaptive)")
         logging.info(f"{'='*60}")
         logging.info(f"{'Task':<6} {'α':<8} {'logit':<8} {'β_mean':<10} {'freq':<8} {'Decision':<10}")
         logging.info("-" * 60)

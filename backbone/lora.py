@@ -206,7 +206,7 @@ class _LoRA_qkv_timm_train(nn.Module):
 
         # === Load previous tasks (frozen) ===
         for i in range(self.task_id):
-            # Skip pruned tasks
+            
             if self.gumbel_gate.pruning_mask[i] == 0:
                 continue
 

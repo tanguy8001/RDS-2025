@@ -14,12 +14,7 @@ import torch.nn.functional as F
 
 
 def sample_gumbel(shape, device='cuda', eps=1e-20):
-    """
-    Sample from Gumbel(0, 1) distribution: −log(−log(Uniform(0,1)))
-
-    Returns:
-        Gumbel noise tensor of given shape
-    """
+    # Sample from Gumbel(0, 1) distribution: −log(−log(Uniform(0,1)))
     U = torch.rand(shape, device=device)
     return -torch.log(-torch.log(U + eps) + eps)
 
@@ -124,44 +119,6 @@ def gumbel_sparsemax(logits, tau=1.0, hard=False, dim=-1, training=True):
         beta = soft_beta
 
     return beta
-
-
-#def gumbel_sparsemax_topk(logits, tau=1.0, k=3, dim=-1, training=True):
-#    """
-#    Gumbel-Sparsemax with top-k selection.
-#
-#    Similar to gumbel_sparsemax, but keeps only the top-k tasks.
-#    Useful when you want to ensure exactly k adapters are selected.
-#
-#    Args:
-#        logits: Gate logits, shape [..., num_tasks]
-#        tau: Temperature parameter
-#        k: Number of tasks to select
-#        dim: Dimension to apply sparsemax over
-#        training: Whether in training mode
-#
-#    Returns:
-#        beta: Task selection weights (sparse, only top-k non-zero)
-#    """
-#    # Get soft beta from gumbel_sparsemax
-#    beta = gumbel_sparsemax(logits, tau=tau, hard=False, dim=dim, training=training)
-#
-#    # Zero out all but top-k values
-#    if k < logits.shape[dim]:
-#        # Get top-k indices
-#        topk_vals, topk_indices = torch.topk(beta, k, dim=dim)
-#
-#        # Create mask for top-k
-#        mask = torch.zeros_like(beta)
-#        mask.scatter_(dim, topk_indices, 1.0)
-#
-#        # Apply mask with straight-through
-#        masked_beta = beta * mask
-#
-#        # Renormalize to sum to 1
-#        beta = masked_beta / (masked_beta.sum(dim=dim, keepdim=True) + 1e-8)
-#
-#    return beta
 
 
 def sparsity_loss(beta, eps=1e-8):
