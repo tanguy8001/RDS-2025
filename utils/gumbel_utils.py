@@ -65,13 +65,12 @@ def sparsemax(logits, dim=-1):
 
     # Compute tau(z): the threshold value
     tau_sum = (logits_sorted * support).sum(dim=dim, keepdim=True)
-    # Add epsilon to prevent division by zero
     tau = (tau_sum - 1) / (k + 1e-8)
 
     # Apply sparsemax transformation
     output = torch.clamp(logits - tau, min=0.0)
 
-    # Normalize to ensure probabilities sum to 1 (handle numerical errors)
+    # Normalize to ensure probabilities sum to 1
     output_sum = output.sum(dim=dim, keepdim=True)
     output = output / (output_sum + 1e-8)
 

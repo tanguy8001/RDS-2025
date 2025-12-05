@@ -119,7 +119,7 @@ class Learner(BaseLearner):
             #)  # 1e-5
             optimizer = optim.AdamW(
                 self._network.parameters(),
-                lr=self.args["lrate"],
+                lr=self.args["beta_lr"],
                 weight_decay=self.args["weight_decay"]
             )
             scheduler = optim.lr_scheduler.MultiStepLR(
@@ -229,8 +229,7 @@ class Learner(BaseLearner):
         anneal_rate = self.args["gumbel_anneal_rate"]
         temp_scheduler = TemperatureScheduler(tau_init, tau_final, anneal_rate)
         total_epochs = self.args["epochs"]
-        #phase1_epochs = int(0.4 * total_epochs)  # TODO: 40% for selection learning, needs to be adjusted. 2 forward passes..?
-        phase1_epochs = 1
+        phase1_epochs = int(0.7 * total_epochs)  # TODO: 70% for selection learning, needs to be adjusted. 2 forward passes..?
         phase2_epochs = total_epochs - phase1_epochs
         lambda_sparsity = self.args["lambda_sparsity"]
 
@@ -384,10 +383,9 @@ class Learner(BaseLearner):
         # === Adaptive pruning threshold (scales with number of active tasks) ===
         num_active = (gumbel_gate.pruning_mask[:current_task] > 0).sum().item() + 1  # +1 for current
         adaptive_threshold = max(0.05, 0.2 / (num_active ** 0.5))  # Decreases as more tasks accumulate
-        prune_threshold = self.args.get("prune_threshold", adaptive_threshold)
 
         logging.info(f"\n{'='*60}")
-        logging.info(f"[Conditional Growth] Task {current_task} | Threshold: {prune_threshold:.3f} (adaptive)")
+        logging.info(f"[Conditional Growth] Task {current_task} | Threshold: {adaptive_threshold:.3f} (adaptive)")
         logging.info(f"{'='*60}")
         logging.info(f"{'Task':<6} {'α':<8} {'logit':<8} {'β_mean':<10} {'freq':<8} {'Decision':<10}")
         logging.info("-" * 60)
@@ -399,19 +397,19 @@ class Learner(BaseLearner):
             freq = selection_freq[idx].item()
 
             if task_idx == current_task:
-                decision = "✗ PRUNE" if current_freq < prune_threshold else "✓ KEEP"
+                decision = "✗ PRUNE" if current_freq < adaptive_threshold else "✓ KEEP"
                 logging.info(f"{task_idx:<6} {alpha:<8.3f} {logit:<8.3f} {beta:<10.4f} {freq:<8.2f} {decision:<10}")
             else:
                 mask = int(gumbel_gate.pruning_mask[task_idx].item())
                 logging.info(f"{task_idx:<6} {alpha:<8.3f} {logit:<8.3f} {beta:<10.4f} {freq:<8.2f} mask={mask}")
 
         # Make decision
-        if current_freq < prune_threshold:
+        if current_freq < adaptive_threshold:
             gumbel_gate.prune_task(current_task)
-            logging.info(f"\n✗ PRUNED: freq={current_freq:.2f} < {prune_threshold}")
+            logging.info(f"\n✗ PRUNED: freq={current_freq:.2f} < {adaptive_threshold}")
         else:
             gumbel_gate.keep_task(current_task)
-            logging.info(f"\n✓ KEPT: freq={current_freq:.2f} >= {prune_threshold}")
+            logging.info(f"\n✓ KEPT: freq={current_freq:.2f} >= {adaptive_threshold}")
 
         gumbel_gate.freeze_task_parameters(current_task)
 

@@ -32,9 +32,9 @@
     "gumbel_tau_final": 0.5,
     "gumbel_anneal_rate": 0.999,
     "lambda_sparsity": 0.1,
-    "prune_threshold": 0.2,
 
     "_comment_phases": "Two-phase training: X% for selection, (100-X)% for magnitude",
     "alpha_lr": 0.02,
+    "beta_lr": 0.001,
     "lambda_alpha": 0.009
 }
