@@ -283,7 +283,6 @@ class Learner(BaseLearner):
         self._train_phase(train_loader, test_loader, optimizer_p2, scheduler_p2, temp_scheduler,
                          lambda_sparsity, phase=2, epochs=phase2_epochs)
 
-        # Cond° growth decision
         self._conditional_growth_decision()
 
     def _train_phase(self, train_loader, test_loader, optimizer, scheduler, temp_scheduler,
@@ -362,54 +361,41 @@ class Learner(BaseLearner):
         logging.info(info)
 
     def _conditional_growth_decision(self):
-        """
-        Conditional growth using multiple Gumbel sampling for robust pruning decisions.
-
-        Uses 10 samples to measure selection frequency - prunes if rarely selected.
-        """
         backbone = self._network.module.backbone if len(self._multiple_gpus) > 1 else self._network.backbone
         gumbel_gate = backbone.gumbel_gate
         current_task = self._cur_task
         task_indices = list(range(current_task + 1))
 
-        # Multiple sampling for robust decision
         with torch.no_grad():
-            mean_betas, selection_freq = gumbel_gate.get_selection_frequency(
-                task_indices, tau=0.5, num_samples=10
-            )
+            betas = gumbel_gate.get_betas(task_indices, tau=0.3)
 
-        current_freq = selection_freq[-1].item()
-
-        # === Adaptive pruning threshold (scales with number of active tasks) ===
-        num_active = (gumbel_gate.pruning_mask[:current_task] > 0).sum().item() + 1  # +1 for current
-        adaptive_threshold = max(0.05, 0.2 / (num_active ** 0.5))  # Decreases as more tasks accumulate
+        current_beta = betas[-1].item()
 
         logging.info(f"\n{'='*60}")
-        logging.info(f"[Conditional Growth] Task {current_task} | Threshold: {adaptive_threshold:.3f} (adaptive)")
+        logging.info(f"[Conditional Growth] Task {current_task} | Current Beta: {current_beta:.3f}")
         logging.info(f"{'='*60}")
-        logging.info(f"{'Task':<6} {'α':<8} {'logit':<8} {'β_mean':<10} {'freq':<8} {'Decision':<10}")
+        logging.info(f"{'Task':<6} {'α':<8} {'logit':<8} {'β':<10} {'Decision':<10}")
         logging.info("-" * 60)
 
         for idx, task_idx in enumerate(task_indices):
             alpha = gumbel_gate.alpha[task_idx].item()
             logit = gumbel_gate.gate_logits[task_idx].item()
-            beta = mean_betas[idx].item()
-            freq = selection_freq[idx].item()
+            beta = betas[idx].item()
 
             if task_idx == current_task:
-                decision = "✗ PRUNE" if current_freq < adaptive_threshold else "✓ KEEP"
-                logging.info(f"{task_idx:<6} {alpha:<8.3f} {logit:<8.3f} {beta:<10.4f} {freq:<8.2f} {decision:<10}")
+                decision = "✗ PRUNE" if current_beta < 0.05 else "✓ KEEP"
+                logging.info(f"{task_idx:<6} {alpha:<8.3f} {logit:<8.3f} {beta:<10.4f} {decision:<10}")
             else:
                 mask = int(gumbel_gate.pruning_mask[task_idx].item())
-                logging.info(f"{task_idx:<6} {alpha:<8.3f} {logit:<8.3f} {beta:<10.4f} {freq:<8.2f} mask={mask}")
+                logging.info(f"{task_idx:<6} {alpha:<8.3f} {logit:<8.3f} {beta:<10.4f} mask={mask}")
 
         # Make decision
-        if current_freq < adaptive_threshold:
+        if current_beta < 0.05:
             gumbel_gate.prune_task(current_task)
-            logging.info(f"\n✗ PRUNED: freq={current_freq:.2f} < {adaptive_threshold}")
+            logging.info(f"\n✗ PRUNED: beta={current_beta:.2f} < 0.05")
         else:
             gumbel_gate.keep_task(current_task)
-            logging.info(f"\n✓ KEPT: freq={current_freq:.2f} >= {adaptive_threshold}")
+            logging.info(f"\n✓ KEPT: beta={current_beta:.2f} >= 0.05")
 
         gumbel_gate.freeze_task_parameters(current_task)
 
@@ -417,7 +403,6 @@ class Learner(BaseLearner):
         num_active = (gumbel_gate.pruning_mask[:current_task + 1] > 0).sum().item()
         logging.info(f"Active: {num_active}/{current_task + 1} adapters")
 
-        # Save state
         mask_path = self.args['filepath'] + 'pruning_mask.pt'
         torch.save(gumbel_gate.pruning_mask.cpu(), mask_path)
 

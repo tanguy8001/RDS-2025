@@ -472,33 +472,6 @@ class GumbelGate(nn.Module):
         beta = gumbel_sparsemax(logits, tau=tau, training=False)
         return beta
 
-    def get_selection_frequency(self, task_indices, tau=1.0, num_samples=10):
-        """
-        Sample multiple times from Gumbel-Sparsemax to measure selection robustness.
-
-        Returns:
-            mean_betas: Average β values across samples
-            selection_freq: Fraction of samples where β > 0 (in Sparsemax support)
-        """
-        if len(task_indices) == 0:
-            return torch.tensor([]), torch.tensor([])
-
-        logits = torch.stack([self.gate_logits[i] for i in task_indices])
-        mask = torch.stack([self.pruning_mask[i] for i in task_indices])
-        logits = logits.masked_fill(mask == 0, float('-inf'))
-
-        # Sample multiple times with Gumbel noise
-        beta_samples = []
-        for _ in range(num_samples):
-            beta = gumbel_sparsemax(logits, tau=tau, training=True)  # With Gumbel noise
-            beta_samples.append(beta)
-
-        beta_samples = torch.stack(beta_samples)  # [num_samples, num_tasks]
-        mean_betas = beta_samples.mean(dim=0)
-        selection_freq = (beta_samples > 1e-6).float().mean(dim=0)  # Fraction selected
-
-        return mean_betas, selection_freq
-
     def prune_task(self, task_id):
         """Permanently prune task (set mask to 0)."""
         self.pruning_mask[task_id] = 0

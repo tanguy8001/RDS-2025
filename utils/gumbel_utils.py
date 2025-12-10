@@ -24,7 +24,7 @@ def sparsemax(logits, dim=-1):
     Sparsemax activation function (Martins & Astudillo, 2016).
 
     Projects logits onto the probability simplex, yielding sparse probabilities
-    with exact zeros. Unlike softmax, sparsemax produces sparse outputs.
+    with exact zeros.
 
     Args:
         logits: Input logits, shape [..., num_classes]
@@ -170,40 +170,3 @@ class TemperatureScheduler:
 
 def hard_selection(beta, threshold=0.1):
     return (beta > threshold).float()
-
-
-if __name__ == "__main__":
-    # Test Sparsemax
-    print("=== Testing Sparsemax ===")
-    logits = torch.tensor([2.0, 1.0, 0.5, 0.1])
-    sparse_probs = sparsemax(logits)
-    print(f"Logits: {logits}")
-    print(f"Sparsemax: {sparse_probs}")
-    print(f"Sum: {sparse_probs.sum()}")
-    print(f"Non-zeros: {(sparse_probs > 0).sum()}")
-
-    # Compare with softmax
-    soft_probs = F.softmax(logits, dim=-1)
-    print(f"Softmax (for comparison): {soft_probs}")
-    print(f"Non-zeros: {(soft_probs > 1e-6).sum()}")
-
-    print("\n=== Testing Gumbel-Sparsemax ===")
-    logits = torch.tensor([3.0, 2.0, 1.0, 0.5, 0.1])
-    beta = gumbel_sparsemax(logits, tau=1.0, training=False)
-    print(f"Logits: {logits}")
-    print(f"Beta: {beta}")
-    print(f"Sum: {beta.sum()}")
-
-    print("\n=== Testing Sparsity Loss ===")
-    beta_sparse = torch.tensor([0.8, 0.2, 0.0, 0.0])
-    beta_uniform = torch.tensor([0.25, 0.25, 0.25, 0.25])
-    print(f"Sparse beta {beta_sparse}: loss = {sparsity_loss(beta_sparse):.4f}")
-    print(f"Uniform beta {beta_uniform}: loss = {sparsity_loss(beta_uniform):.4f}")
-
-    print("\n=== Testing Temperature Scheduler ===")
-    scheduler = TemperatureScheduler(tau_init=5.0, tau_final=0.5, anneal_rate=0.99)
-    print(f"Step 0: τ = {scheduler.step():.3f}")
-    print(f"Step 10: τ = {scheduler.get_temperature():.3f}")
-    for _ in range(10):
-        scheduler.step()
-    print(f"Step 20: τ = {scheduler.get_temperature():.3f}")
