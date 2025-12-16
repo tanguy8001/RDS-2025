@@ -308,7 +308,7 @@ class _LoRA_qkv_timm_eval(nn.Module):
         task_indices = []
 
         # Load all non-pruned tasks
-        for i in range(self.task_id):
+        for i in range(self.task_id + 1):
             # Skip pruned tasks
             if self.gumbel_gate.pruning_mask[i] == 0:
                 continue
@@ -536,11 +536,12 @@ class LoRA_ViT_timm(nn.Module):
             param.requires_grad = False
 
         saved_lora_A, saved_lora_B = {}, {}
-        for i in range(self.task_id):
-            file_path = self.save_file+'lora_w_a_'+str(i)+'.pt'
-            saved_lora_A['saved_A_'+str(i)] = torch.load(file_path)
-            file_path = self.save_file+'lora_w_b_'+str(i)+'.pt'
-            saved_lora_B['saved_B_'+str(i)] = torch.load(file_path)
+        for i in range(self.task_id + 1):
+            file_path_a = self.save_file+'lora_w_a_'+str(i)+'.pt'
+            file_path_b = self.save_file+'lora_w_b_'+str(i)+'.pt'
+            if os.path.exists(file_path_a) and os.path.exists(file_path_b):
+                saved_lora_A['saved_A_'+str(i)] = torch.load(file_path_a)
+                saved_lora_B['saved_B_'+str(i)] = torch.load(file_path_b)
 
         # Init GumbelGate for task selection (replaces scaling factors)
         self.gumbel_gate = GumbelGate(max_tasks=20, init_alpha=1.0, init_logit=0.0)
@@ -579,6 +580,12 @@ class LoRA_ViT_timm(nn.Module):
                     self.task_id, saved_lora_A, saved_lora_B, t_layer_i, self.rank, self.gumbel_gate, tau=self.tau
                 )
             else:
+                for i in range(self.task_id):
+                    # Skip pruned tasks
+                    if self.gumbel_gate.pruning_mask[i] == 0:
+                        print(f'Pruned task {i} skipped')
+                        continue
+                    print(f'Applying LoRA adapter for task {i}')
                 blk.attn.qkv = _LoRA_qkv_timm_eval(self.task_id, w_qkv_linear, saved_lora_A, saved_lora_B, t_layer_i, self.rank, self.gumbel_gate, self.save_file) 
 
         self.reset_parameters()

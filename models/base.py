@@ -163,7 +163,7 @@ class BaseLearner(object):
             with torch.no_grad():
                 # outputs = self._network.forward(inputs, eval=True)['logits']
                 # print('outputs', outputs['logits'])
-                outputs =  self._network.forward(inputs)['logits']
+                outputs =  self._network.forward(inputs, eval=True)['logits']
                 # outputs = self._network(inputs)['logits']
             predicts = torch.topk(outputs, k=self.topk, dim=1, largest=True, sorted=True)[1]  # [bs, topk]
             y_pred.append(predicts.cpu().numpy())

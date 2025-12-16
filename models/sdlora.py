@@ -224,19 +224,45 @@ class Learner(BaseLearner):
         gumbel_gate = backbone.gumbel_gate
         task_indices = list(range(self._cur_task + 1))
 
-        tau_init = self.args["gumbel_tau_init"]
-        tau_final = self.args["gumbel_tau_final"]
-        anneal_rate = self.args["gumbel_anneal_rate"]
-        temp_scheduler = TemperatureScheduler(tau_init, tau_final, anneal_rate)
+        temp_scheduler = TemperatureScheduler(self.args["gumbel_tau_init"], self.args["gumbel_tau_final"], self.args["gumbel_anneal_rate"])
+
         total_epochs = self.args["epochs"]
-        phase1_epochs = int(0.7 * total_epochs)  # TODO: 70% for selection learning, needs to be adjusted. 2 forward passes..?
-        phase2_epochs = total_epochs - phase1_epochs
-        lambda_sparsity = self.args["lambda_sparsity"]
+        magnitude_epochs = int(self.args["alpha_beta_ratio"] * total_epochs)
+        selection_epochs = total_epochs - magnitude_epochs
 
-        logging.info(f"[Two-Phase Training] Task {self._cur_task}: Phase 1 (selection) = {phase1_epochs} epochs, "
-                    f"Phase 2 (magnitude) = {phase2_epochs} epochs")
+        logging.info(f"[Two-Phase Training] Task {self._cur_task}: Selection = {selection_epochs} epochs, "
+                    f"Magnitude = {magnitude_epochs} epochs")
 
-        logging.info(f"[Phase 1] Learning selection (new adapter frozen, α frozen, l trainable)")
+        logging.info(f"[Phase Magnitude] Learning magnitude (new adapter trainable, α trainable, l frozen)")
+        
+        # Unfreeze new task's AB adapters
+        for param in backbone.w_As:
+            param.weight.requires_grad = True
+        for param in backbone.w_Bs:
+            param.weight.requires_grad = True
+
+        gumbel_gate.freeze_logits(task_indices)
+        gumbel_gate.unfreeze_alphas(task_indices)
+
+        # New optimizer with param groups
+        alpha_params = [gumbel_gate.alpha[i] for i in task_indices]
+        lora_params = [p.weight for p in backbone.w_As + backbone.w_Bs]
+
+        optimizer_p2 = optim.SGD([
+            {'params': lora_params, 'lr': self.args["lrate"]},
+            {'params': alpha_params, 'lr': self.args["alpha_lr"]}
+        ], momentum=0.9)
+
+        scheduler_p2 = optim.lr_scheduler.MultiStepLR(
+            optimizer=optimizer_p2,
+            milestones=[int(0.6 * magnitude_epochs), int(0.8 * magnitude_epochs)],
+            gamma=self.args["lrate_decay"] if self.args["lrate_decay"] > 0 else 0.5
+        )
+
+        self._train_phase(train_loader, test_loader, optimizer_p2, scheduler_p2, temp_scheduler,
+                         self.args["lambda_sparsity"], phase=2, epochs=magnitude_epochs)
+
+        logging.info(f"[Phase Selection] Learning selection (new adapter frozen, α frozen, l trainable)")
 
         # Freeze new task's AB adapters
         for param in backbone.w_As:
@@ -250,38 +276,9 @@ class Learner(BaseLearner):
         gumbel_gate.unfreeze_logits(task_indices)
 
         self._train_phase(train_loader, test_loader, optimizer, scheduler, temp_scheduler,
-                         lambda_sparsity, phase=1, epochs=phase1_epochs)
+                         self.args["lambda_sparsity"], phase=1, epochs=selection_epochs)
 
-        logging.info(f"[Phase 2] Learning new task (new adapter trainable, α trainable, l frozen)")
-
-        # Unfreeze new task's AB adapters
-        for param in backbone.w_As:
-            param.weight.requires_grad = True
-        for param in backbone.w_Bs:
-            param.weight.requires_grad = True
-
-        gumbel_gate.freeze_logits(task_indices)
-        gumbel_gate.unfreeze_alphas(task_indices)
-
-        # New optimizer for Phase 2 with param groups
-        alpha_params = [gumbel_gate.alpha[i] for i in task_indices]
-        lora_params = [p.weight for p in backbone.w_As + backbone.w_Bs]
-
-        optimizer_p2 = optim.SGD([
-            {'params': lora_params, 'lr': self.args["lrate"]},
-            {'params': alpha_params, 'lr': self.args["alpha_lr"]}
-        ], momentum=0.9)
-
-        scheduler_p2 = optim.lr_scheduler.MultiStepLR(
-            optimizer=optimizer_p2,
-            milestones=[int(0.6 * phase2_epochs), int(0.8 * phase2_epochs)],
-            gamma=self.args["lrate_decay"] if self.args["lrate_decay"] > 0 else 0.5
-        )
-
-        logging.info(f'[Phase 2] LoRA LR: {self.args["lrate"]:.2e}, Alpha LR: {self.args.get("alpha_lr", self.args["lrate"]):.2e}')
-
-        self._train_phase(train_loader, test_loader, optimizer_p2, scheduler_p2, temp_scheduler,
-                         lambda_sparsity, phase=2, epochs=phase2_epochs)
+        logging.info(f'[After Both Phases] LoRA LR: {self.args["lrate"]:.2e}, Alpha LR: {self.args.get("alpha_lr", self.args["lrate"]):.2e}')
 
         self._conditional_growth_decision()
 
@@ -291,8 +288,6 @@ class Learner(BaseLearner):
         backbone = self._network.module.backbone if len(self._multiple_gpus) > 1 else self._network.backbone
         blocks = backbone.lora_vit.blocks
         gumbel_gate = backbone.gumbel_gate
-
-        lambda_alpha = self.args["lambda_alpha"]
 
         prog_bar = tqdm(range(epochs), desc=f"Phase {phase}")
         for epoch in prog_bar:
