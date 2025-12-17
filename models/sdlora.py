@@ -233,51 +233,67 @@ class Learner(BaseLearner):
         logging.info(f"[Two-Phase Training] Task {self._cur_task}: Selection = {selection_epochs} epochs, "
                     f"Magnitude = {magnitude_epochs} epochs")
 
-        logging.info(f"[Phase Magnitude] Learning magnitude (new adapter trainable, α trainable, l frozen)")
+        logging.info(f"[Phase 1] Learning magnitude + FC (Adapters trainable, α trainable, FC trainable, l frozen)")
         
-        # Unfreeze new task's AB adapters
+        # Unfreeze new task's AB adapters and FC layer
         for param in backbone.w_As:
             param.weight.requires_grad = True
         for param in backbone.w_Bs:
             param.weight.requires_grad = True
+
+        if len(self._multiple_gpus) > 1:
+            self._network.module.fc.weight.requires_grad = True
+            self._network.module.fc.bias.requires_grad = True
+            fc_params = self._network.module.fc.parameters()
+        else:
+            self._network.fc.weight.requires_grad = True
+            self._network.fc.bias.requires_grad = True
+            fc_params = self._network.fc.parameters()
 
         gumbel_gate.freeze_logits(task_indices)
         gumbel_gate.unfreeze_alphas(task_indices)
 
-        # New optimizer with param groups
+        # New optimizer with lora, alpha and fc
         alpha_params = [gumbel_gate.alpha[i] for i in task_indices]
         lora_params = [p.weight for p in backbone.w_As + backbone.w_Bs]
 
-        optimizer_p2 = optim.SGD([
+        optimizer_p1 = optim.SGD([
             {'params': lora_params, 'lr': self.args["lrate"]},
-            {'params': alpha_params, 'lr': self.args["alpha_lr"]}
+            {'params': alpha_params, 'lr': self.args["alpha_lr"]},
+            {'params': fc_params, 'lr': self.args["lrate"]}
         ], momentum=0.9)
 
-        scheduler_p2 = optim.lr_scheduler.MultiStepLR(
-            optimizer=optimizer_p2,
+        scheduler_p1 = optim.lr_scheduler.MultiStepLR(
+            optimizer=optimizer_p1,
             milestones=[int(0.6 * magnitude_epochs), int(0.8 * magnitude_epochs)],
             gamma=self.args["lrate_decay"] if self.args["lrate_decay"] > 0 else 0.5
         )
 
-        self._train_phase(train_loader, test_loader, optimizer_p2, scheduler_p2, temp_scheduler,
-                         self.args["lambda_sparsity"], phase=2, epochs=magnitude_epochs)
+        self._train_phase(train_loader, test_loader, optimizer_p1, scheduler_p1, temp_scheduler,
+                         self.args["lambda_sparsity"], phase=1, epochs=magnitude_epochs)
 
-        logging.info(f"[Phase Selection] Learning selection (new adapter frozen, α frozen, l trainable)")
+        logging.info(f"[Phase 2] Learning selection (Adapters frozen, α frozen, FC frozen, l trainable)")
 
-        # Freeze new task's AB adapters
+        # Freeze new task's AB adapters and FC layer
         for param in backbone.w_As:
             param.weight.requires_grad = False
             param.weight.grad = None
         for param in backbone.w_Bs:
             param.weight.requires_grad = False
             param.weight.grad = None
+        
+        if len(self._multiple_gpus) > 1:
+            self._network.module.fc.weight.requires_grad = False
+            self._network.module.fc.bias.requires_grad = False
+        else:
+            self._network.fc.weight.requires_grad = False
+            self._network.fc.bias.requires_grad = False
 
         gumbel_gate.freeze_alphas(task_indices)
         gumbel_gate.unfreeze_logits(task_indices)
 
         self._train_phase(train_loader, test_loader, optimizer, scheduler, temp_scheduler,
-                         self.args["lambda_sparsity"], phase=1, epochs=selection_epochs)
-
+                         self.args["lambda_sparsity"], phase=2, epochs=selection_epochs)
         logging.info(f'[After Both Phases] LoRA LR: {self.args["lrate"]:.2e}, Alpha LR: {self.args.get("alpha_lr", self.args["lrate"]):.2e}')
 
         self._conditional_growth_decision()
@@ -308,8 +324,8 @@ class Learner(BaseLearner):
                 # Reg losses
                 loss_reg = 0
 
-                # Phase 1: Sparsity reg (encourage sparse β selection)
-                if phase == 1:
+                # Phase 2: Sparsity reg (encourage sparse β selection)
+                if phase == 2:
                     num_layers = 0
                     for blk in blocks:
                         qkv_layer = blk.attn.qkv
@@ -320,7 +336,7 @@ class Learner(BaseLearner):
                     if num_layers > 0:
                         loss_reg = lambda_sparsity * (loss_reg / (2 * num_layers))
 
-                # Phase 2: No alpha regularization (let them learn freely)
+                # Phase 1: No alpha regularization (let them learn freely)
                 # Use gradient clipping instead to prevent explosion
 
                 loss = loss_clf + loss_reg
@@ -329,7 +345,7 @@ class Learner(BaseLearner):
                 loss.backward()
 
                 # Gradient clipping for alphas (prevents explosion without constraining values)
-                if phase == 2:
+                if phase == 1:
                     alpha_params = [gumbel_gate.alpha[i] for i in range(self._cur_task + 1)]
                     torch.nn.utils.clip_grad_norm_(alpha_params, max_norm=1.0)
 
@@ -362,7 +378,7 @@ class Learner(BaseLearner):
         task_indices = list(range(current_task + 1))
 
         with torch.no_grad():
-            betas = gumbel_gate.get_betas(task_indices, tau=0.3)
+            betas = gumbel_gate.get_betas(task_indices, tau=0.5)
 
         current_beta = betas[-1].item()
 

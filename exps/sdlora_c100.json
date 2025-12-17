@@ -28,7 +28,7 @@
     "weight_decay": 2e-4,
 
     "_comment_gumbel": "Gumbel CL-LoRA hyperparameters",
-    "alpha_beta_ratio": 0.7,
+    "alpha_beta_ratio": 0.9,
     "gumbel_tau_init": 5.0,
     "gumbel_tau_final": 0.5,
     "gumbel_anneal_rate": 0.999,

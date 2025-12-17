@@ -307,10 +307,16 @@ class _LoRA_qkv_timm_eval(nn.Module):
         normalized_adapters_v = []
         task_indices = []
 
-        # Load all non-pruned tasks
-        for i in range(self.task_id + 1):
+        # Load all non-pruned tasks (only those that have been saved)
+        # Note: self.task_id is incremented after saving, so it represents the next task to train
+        # For evaluation, we only use tasks 0 to task_id-1 (completed tasks)
+        for i in range(self.task_id):
             # Skip pruned tasks
             if self.gumbel_gate.pruning_mask[i] == 0:
+                continue
+
+            # Skip if adapter not saved yet (e.g., current task during training)
+            if 'saved_A_' + str(i) not in self.saved_A or 'saved_B_' + str(i) not in self.saved_B:
                 continue
 
             task_indices.append(i)
@@ -580,12 +586,6 @@ class LoRA_ViT_timm(nn.Module):
                     self.task_id, saved_lora_A, saved_lora_B, t_layer_i, self.rank, self.gumbel_gate, tau=self.tau
                 )
             else:
-                for i in range(self.task_id):
-                    # Skip pruned tasks
-                    if self.gumbel_gate.pruning_mask[i] == 0:
-                        print(f'Pruned task {i} skipped')
-                        continue
-                    print(f'Applying LoRA adapter for task {i}')
                 blk.attn.qkv = _LoRA_qkv_timm_eval(self.task_id, w_qkv_linear, saved_lora_A, saved_lora_B, t_layer_i, self.rank, self.gumbel_gate, self.save_file) 
 
         self.reset_parameters()
