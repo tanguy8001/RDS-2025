@@ -557,7 +557,6 @@ class LoRA_ViT_timm(nn.Module):
         if os.path.exists(mask_path):
             self.gumbel_gate.pruning_mask = torch.load(mask_path)
             num_pruned = (self.gumbel_gate.pruning_mask == 0).sum().item()
-            print(f'[GumbelGate] Loaded pruning mask: {num_pruned} adapters already pruned')
         else:
             print('[GumbelGate] No previous mask found, starting fresh')
 

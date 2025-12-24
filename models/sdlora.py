@@ -226,9 +226,8 @@ class Learner(BaseLearner):
 
         temp_scheduler = TemperatureScheduler(self.args["gumbel_tau_init"], self.args["gumbel_tau_final"], self.args["gumbel_anneal_rate"])
 
-        total_epochs = self.args["epochs"]
-        magnitude_epochs = int(self.args["alpha_beta_ratio"] * total_epochs)
-        selection_epochs = total_epochs - magnitude_epochs
+        magnitude_epochs = int(self.args["alpha_epochs"])
+        selection_epochs = int(self.args["beta_epochs"])
 
         logging.info(f"[Two-Phase Training] Task {self._cur_task}: Selection = {selection_epochs} epochs, "
                     f"Magnitude = {magnitude_epochs} epochs")

@@ -20,7 +20,6 @@
     "init_milestones": [60, 120, 170],
     "init_lr_decay": 0.1,
     "init_weight_decay": 0.0005,
-    "epochs": 15,
     "lrate": 8e-3,
     "milestones": [40, 70],
     "lrate_decay": 0,
@@ -28,14 +27,14 @@
     "weight_decay": 2e-4,
 
     "_comment_gumbel": "Gumbel CL-LoRA hyperparameters",
-    "alpha_beta_ratio": 0.9,
+    "alpha_epochs": 15,
+    "beta_epochs": 2,
     "gumbel_tau_init": 5.0,
     "gumbel_tau_final": 0.5,
     "gumbel_anneal_rate": 0.999,
-    "lambda_sparsity": 0.1,
+    "lambda_sparsity": 1,
 
     "_comment_phases": "Two-phase training: X% for selection, (100-X)% for magnitude",
-    "alpha_lr": 0.02,
-    "beta_lr": 0.001,
-    "lambda_alpha": 0.009
+    "alpha_lr": 8e-3,
+    "beta_lr": 0.01
 }
