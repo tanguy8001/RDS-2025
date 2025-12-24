@@ -344,9 +344,9 @@ class Learner(BaseLearner):
                 loss.backward()
 
                 # Gradient clipping for alphas (prevents explosion without constraining values)
-                if phase == 1:
-                    alpha_params = [gumbel_gate.alpha[i] for i in range(self._cur_task + 1)]
-                    torch.nn.utils.clip_grad_norm_(alpha_params, max_norm=1.0)
+                #if phase == 1:
+                #    alpha_params = [gumbel_gate.alpha[i] for i in range(self._cur_task + 1)]
+                #    torch.nn.utils.clip_grad_norm_(alpha_params, max_norm=1.0)
 
                 optimizer.step()
 
@@ -377,7 +377,7 @@ class Learner(BaseLearner):
         task_indices = list(range(current_task + 1))
 
         with torch.no_grad():
-            betas = gumbel_gate.get_betas(task_indices, tau=0.5)
+            betas = gumbel_gate.get_betas(task_indices, tau=self.args["gumbel_tau_final"])
 
         current_beta = betas[-1].item()
 
