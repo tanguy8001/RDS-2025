@@ -550,7 +550,8 @@ class LoRA_ViT_timm(nn.Module):
                 saved_lora_B['saved_B_'+str(i)] = torch.load(file_path_b)
 
         # Init GumbelGate for task selection (replaces scaling factors)
-        self.gumbel_gate = GumbelGate(max_tasks=20, init_alpha=self.args.init_alpha, init_logit=0.0)
+        init_alpha = self.args.get("init_alpha", 0.8) if self.args is not None else 0.8
+        self.gumbel_gate = GumbelGate(max_tasks=20, init_alpha=init_alpha, init_logit=0.0)
 
         # Load GumbelGate parameters if they exist
         mask_path = self.save_file + 'pruning_mask.pt'
