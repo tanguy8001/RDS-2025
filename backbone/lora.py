@@ -387,6 +387,16 @@ class GumbelGate(nn.Module):
         self.register_buffer('pruning_mask', torch.ones(max_tasks))
         self.max_tasks = max_tasks
 
+    def load_parameters(self, alphas_list, logits_list, mask):
+        """Load trained alphas, logits and mask."""
+        for i, val in enumerate(alphas_list):
+            if i < self.max_tasks:
+                self.alpha[i].data.copy_(val.to(self.alpha[i].device))
+        for i, val in enumerate(logits_list):
+            if i < self.max_tasks:
+                self.gate_logits[i].data.copy_(val.to(self.gate_logits[i].device))
+        self.pruning_mask.copy_(mask.to(self.pruning_mask.device))
+
     def freeze_task_parameters(self, task_id):
         self.alpha[task_id].requires_grad = False
         self.alpha[task_id].grad = None
@@ -540,16 +550,22 @@ class LoRA_ViT_timm(nn.Module):
                 saved_lora_B['saved_B_'+str(i)] = torch.load(file_path_b)
 
         # Init GumbelGate for task selection (replaces scaling factors)
-        init_alpha = self.args.get("init_alpha", 0.8) if self.args is not None else 0.8
-        self.gumbel_gate = GumbelGate(max_tasks=20, init_alpha=init_alpha, init_logit=0.0)
+        self.gumbel_gate = GumbelGate(max_tasks=20, init_alpha=self.args.init_alpha, init_logit=0.0)
 
-        # Load pruning mask from previous tasks (enables persistence)
+        # Load GumbelGate parameters if they exist
         mask_path = self.save_file + 'pruning_mask.pt'
-        if os.path.exists(mask_path):
+        # We look for the gating parameters of the most recently COMPLETED task
+        gate_path = self.save_file + f'gumbel_gate_task_{self.task_id-1}.pt'
+        if os.path.exists(gate_path):
+            state = torch.load(gate_path)
+            self.gumbel_gate.load_parameters(state['alphas'], state['gate_logits'], state['pruning_mask'])
+            print(f'[GumbelGate] Loaded parameters from {gate_path}')
+        elif os.path.exists(mask_path):
+            # Fallback to just the mask if the full state isn't found
             self.gumbel_gate.pruning_mask = torch.load(mask_path)
-            num_pruned = (self.gumbel_gate.pruning_mask == 0).sum().item()
+            print(f'[GumbelGate] Loaded pruning mask from {mask_path}')
         else:
-            print('[GumbelGate] No previous mask found, starting fresh')
+            print('[GumbelGate] No previous state found, starting fresh')
 
         self.tau = 1.0
 
