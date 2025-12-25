@@ -1,14 +1,9 @@
-# Sheng Wang at Feb 22 2023
-
 import math
-
 import timm
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
-# from safetensors import safe_open
-# from safetensors.torch import save_file
 from timm.models.vision_transformer import VisionTransformer as timm_ViT
 from torch import Tensor
 from torch.nn.parameter import Parameter
@@ -165,29 +160,19 @@ class _LoRA_qkv_timm_train(nn.Module):
         self.gumbel_gate = gumbel_gate
         self.tau = tau
 
-    def _compute_normalized_adapter(self, w_a, w_b, x):
+    def _compute_adapter_out(self, w_a, w_b, x, normalize=True):
         """
-        Compute normalized adapter output: (B @ A @ x) / norm
-
-        Note: Using ||B|| * ||A|| instead of ||BA||_F for memory efficiency.
-        This is the same as original SD-LoRA (trade correctness for efficiency).
-
-        Args:
-            w_a: Low-rank matrix A [rank, dim]
-            w_b: Low-rank matrix B [dim, rank]
-            x: Input [batch, seq, dim]
-
-        Returns:
-            Normalized adapter output [batch, seq, dim]
+        Compute adapter output, optionally normalized by ||B||*||A||.
+        
+        Original SD-LoRA only normalizes PREVIOUS tasks to maintain 
+        training stability for the CURRENT task, whose norm starts at 0.
         """
-        # Compute adapter output: B(A(x))
-        adapter_out = w_b(w_a(x))  # [B, seq, dim]
-
-        # Memory-efficient normalization (avoids matrix multiplication)
-        # ||B|| * ||A|| ≈ ||BA||_F (approximate, but avoids [dim, dim] intermediate)
+        adapter_out = w_b(w_a(x))
+        if not normalize:
+            return adapter_out
+            
+        # Normalization used for previously learned tasks
         norm = torch.norm(w_b.weight) * torch.norm(w_a.weight) + 1e-8
-
-        # Normalize
         return adapter_out / norm
 
     def forward(self, x):
@@ -233,9 +218,9 @@ class _LoRA_qkv_timm_train(nn.Module):
             w_a_v.weight = nn.Parameter(A_v.weight.to(x.device), requires_grad=False)
             w_b_v.weight = nn.Parameter(B_v.weight.to(x.device), requires_grad=False)
 
-            # Compute normalized outputs
-            norm_q = self._compute_normalized_adapter(w_a_q, w_b_q, x)
-            norm_v = self._compute_normalized_adapter(w_a_v, w_b_v, x)
+            # Compute normalized outputs for previous tasks
+            norm_q = self._compute_adapter_out(w_a_q, w_b_q, x, normalize=True)
+            norm_v = self._compute_adapter_out(w_a_v, w_b_v, x, normalize=True)
 
             normalized_adapters_q.append(norm_q)
             normalized_adapters_v.append(norm_v)
@@ -243,8 +228,9 @@ class _LoRA_qkv_timm_train(nn.Module):
         # === Add current task (trainable) ===
         task_indices.append(self.task_id)
 
-        norm_q_curr = self._compute_normalized_adapter(self.linear_a_q, self.linear_b_q, x)
-        norm_v_curr = self._compute_normalized_adapter(self.linear_a_v, self.linear_b_v, x)
+        # Skip normalization for the current task to match SOTA and prevent instability
+        norm_q_curr = self._compute_adapter_out(self.linear_a_q, self.linear_b_q, x, normalize=False)
+        norm_v_curr = self._compute_adapter_out(self.linear_a_v, self.linear_b_v, x, normalize=False)
 
         normalized_adapters_q.append(norm_q_curr)
         normalized_adapters_v.append(norm_v_curr)
@@ -295,9 +281,11 @@ class _LoRA_qkv_timm_eval(nn.Module):
         self.gumbel_gate = gumbel_gate
         self.save_file = save_file
 
-    def _compute_normalized_adapter(self, w_a, w_b, x):
-        """Compute normalized adapter: (B @ A @ x) / norm (memory-efficient)"""
+    def _compute_adapter_out(self, w_a, w_b, x, normalize=True):
+        """Compute adapter output, optionally normalized."""
         adapter_out = w_b(w_a(x))
+        if not normalize:
+            return adapter_out
         norm = torch.norm(w_b.weight) * torch.norm(w_a.weight) + 1e-8
         return adapter_out / norm
 
@@ -340,9 +328,10 @@ class _LoRA_qkv_timm_eval(nn.Module):
             w_a_v.weight = nn.Parameter(A_v.weight.to(x.device), requires_grad=False)
             w_b_v.weight = nn.Parameter(B_v.weight.to(x.device), requires_grad=False)
 
-            # Normalize
-            norm_q = self._compute_normalized_adapter(w_a_q, w_b_q, x)
-            norm_v = self._compute_normalized_adapter(w_a_v, w_b_v, x)
+            # Normalize all except the latest task (to match training behavior)
+            is_latest = (i == self.task_id - 1)
+            norm_q = self._compute_adapter_out(w_a_q, w_b_q, x, normalize=not is_latest)
+            norm_v = self._compute_adapter_out(w_a_v, w_b_v, x, normalize=not is_latest)
 
             normalized_adapters_q.append(norm_q)
             normalized_adapters_v.append(norm_v)
@@ -381,7 +370,7 @@ class GumbelGate(nn.Module):
         init_alpha: Initial value for magnitude parameters α
         init_logit: Initial value for gate logits l
     """
-    def __init__(self, max_tasks=20, init_alpha=1.0, init_logit=0.0):
+    def __init__(self, max_tasks=20, init_alpha=0.8, init_logit=0.0):
         super().__init__()
 
         # α: learnable magnitude parameters (one scalar per task)
@@ -507,8 +496,9 @@ class MyLinear(nn.Module):
 
 
 class LoRA_ViT_timm(nn.Module):
-    def __init__(self, vit_model: timm_ViT, r: int, num_classes: int = 0, increment=10, filepath = './', lora_layer=None, eval=False, index=True, cur_task_index=None):
+    def __init__(self, vit_model: timm_ViT, r: int, num_classes: int = 0, increment=10, filepath = './', lora_layer=None, eval=False, index=True, cur_task_index=None, args=None):
         super(LoRA_ViT_timm, self).__init__()
+        self.args = args
 
         assert r > 0
         self.rank =r
@@ -550,7 +540,8 @@ class LoRA_ViT_timm(nn.Module):
                 saved_lora_B['saved_B_'+str(i)] = torch.load(file_path_b)
 
         # Init GumbelGate for task selection (replaces scaling factors)
-        self.gumbel_gate = GumbelGate(max_tasks=20, init_alpha=1.0, init_logit=0.0)
+        init_alpha = self.args.get("init_alpha", 0.8) if self.args is not None else 0.8
+        self.gumbel_gate = GumbelGate(max_tasks=20, init_alpha=init_alpha, init_logit=0.0)
 
         # Load pruning mask from previous tasks (enables persistence)
         mask_path = self.save_file + 'pruning_mask.pt'

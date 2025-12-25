@@ -12,7 +12,7 @@ def get_backbone(args, pretrained=False):
     ## Lora version
     if name == "pretrained_vit_b16_224" or name == "vit_base_patch16_224":
         model = timm.create_model("vit_base_patch16_224", pretrained=True, num_classes=0)
-        model = LoRA_ViT_timm(vit_model=model.eval(), r=10,  num_classes=10, increment=args['increment'], filepath=args['filepath'])
+        model = LoRA_ViT_timm(vit_model=model.eval(), r=10,  num_classes=10, increment=args['increment'], filepath=args['filepath'], args=args)
         # model = nn.DataParallel(model)
         model.out_dim = 768
         return model
