@@ -161,15 +161,13 @@ class BaseLearner(object):
         for _, (_, inputs, targets) in enumerate(loader):
             inputs = inputs.to(self._device)
             with torch.no_grad():
-                # outputs = self._network.forward(inputs, eval=True)['logits']
-                # print('outputs', outputs['logits'])
+                # CRITICAL: eval=True ensures evaluation uses ONLY non-pruned adapters
+                # This triggers the eval path through IncrementalNet → LoRA_ViT_timm
+                # which uses _LoRA_qkv_timm_eval layers that respect the pruning mask
                 outputs =  self._network.forward(inputs, eval=True)['logits']
-                # outputs = self._network(inputs)['logits']
             predicts = torch.topk(outputs, k=self.topk, dim=1, largest=True, sorted=True)[1]  # [bs, topk]
             y_pred.append(predicts.cpu().numpy())
             y_true.append(targets.cpu().numpy())
-            # print('y_pred', np.concatenate(y_pred))
-            # print('y_true', y_true)
         return np.concatenate(y_pred), np.concatenate(y_true)  # [N, topk]
 
     def _eval_nme(self, loader, class_means):

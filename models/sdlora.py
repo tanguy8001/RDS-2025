@@ -371,6 +371,16 @@ class Learner(BaseLearner):
         logging.info(info)
 
     def _conditional_growth_decision(self):
+        """
+        Decide whether to keep or prune the current task's adapter.
+        
+        After training, evaluate the learned β value for the current task:
+        - If β < 0.05: PRUNE (set mask=0) - adapter not useful
+        - If β >= 0.05: KEEP (set mask=1) - adapter is useful
+        
+        The pruning decision is PERMANENT - pruned adapters will be skipped
+        in all future tasks' training and evaluation.
+        """
         backbone = self._network.module.backbone if len(self._multiple_gpus) > 1 else self._network.backbone
         gumbel_gate = backbone.gumbel_gate
         current_task = self._cur_task
@@ -397,22 +407,26 @@ class Learner(BaseLearner):
                 logging.info(f"{task_idx:<6} {alpha:<8.3f} {logit:<8.3f} {beta:<10.4f} {decision:<10}")
             else:
                 mask = int(gumbel_gate.pruning_mask[task_idx].item())
-                logging.info(f"{task_idx:<6} {alpha:<8.3f} {logit:<8.3f} {beta:<10.4f} mask={mask}")
+                status = "KEPT" if mask == 1 else "PRUNED"
+                logging.info(f"{task_idx:<6} {alpha:<8.3f} {logit:<8.3f} {beta:<10.4f} mask={mask} ({status})")
 
         # Make decision
         if current_beta < 0.05:
             gumbel_gate.prune_task(current_task)
-            logging.info(f"\n✗ PRUNED: beta={current_beta:.2f} < 0.05")
+            logging.info(f"\n✗ PRUNED: beta={current_beta:.2f} < 0.05 (adapter will be skipped in future)")
         else:
             gumbel_gate.keep_task(current_task)
-            logging.info(f"\n✓ KEPT: beta={current_beta:.2f} >= 0.05")
+            logging.info(f"\n✓ KEPT: beta={current_beta:.2f} >= 0.05 (adapter will be used in future)")
 
         gumbel_gate.freeze_task_parameters(current_task)
 
         # Summary
         num_active = (gumbel_gate.pruning_mask[:current_task + 1] > 0).sum().item()
-        logging.info(f"Active: {num_active}/{current_task + 1} adapters")
+        num_pruned = (current_task + 1) - num_active
+        logging.info(f"Active: {num_active}/{current_task + 1} adapters ({num_pruned} pruned)")
+        logging.info(f"Sublinear growth achieved: {num_pruned} adapters permanently removed")
 
+        # Save pruning mask and gate parameters for next task
         mask_path = self.args['filepath'] + 'pruning_mask.pt'
         torch.save(gumbel_gate.pruning_mask.cpu(), mask_path)
 
@@ -423,4 +437,6 @@ class Learner(BaseLearner):
             'pruning_mask': gumbel_gate.pruning_mask.cpu(),
             'task_id': current_task,
         }, state_path)
+        logging.info(f"Saved pruning state to {mask_path}")
+        logging.info(f"Saved gate parameters to {state_path}")
         logging.info(f"{'='*60}\n")
