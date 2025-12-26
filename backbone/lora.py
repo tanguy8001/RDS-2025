@@ -177,8 +177,13 @@ class _LoRA_qkv_timm_train(nn.Module):
 
     def forward(self, x):
         """
-        Forward pass: ΔW = Σ β_i α_i × normalized_adapter_i
-
+        Training forward pass: ΔW = Σ β_i α_i × normalized_adapter_i
+        
+        Includes:
+        1. Previous tasks (0 to task_id-1) - normalized, frozen
+        2. Current task (task_id) - NOT normalized, trainable
+        3. Gumbel-Sparsemax gating with temperature annealing
+        
         Args:
             x: Input [batch, seq, dim]
 
@@ -189,9 +194,9 @@ class _LoRA_qkv_timm_train(nn.Module):
         normalized_adapters_v = []
         task_indices = []
 
-        # === Load previous tasks (frozen) ===
+        # === Load previous tasks (frozen, normalized) ===
         for i in range(self.task_id):
-            
+            # Skip pruned adapters from previous tasks
             if self.gumbel_gate.pruning_mask[i] == 0:
                 continue
 
@@ -290,20 +295,34 @@ class _LoRA_qkv_timm_eval(nn.Module):
         return adapter_out / norm
 
     def forward(self, x):
-        """Evaluation forward pass (no Gumbel noise)."""
+        """
+        Evaluation forward pass - Uses ONLY non-pruned adapters.
+        
+        Key Differences from Training:
+        1. NO current task adapter included (loop: 0 to task_id-1, not task_id)
+        2. Pruning mask is checked - pruned adapters are skipped
+        3. No Gumbel noise - deterministic gating
+        4. Fixed temperature (tau=0.5) - sharper selection
+        
+        Args:
+            x: Input tensor [batch, seq, dim]
+            
+        Returns:
+            qkv: Output tensor [batch, seq, 3*dim] with adapter deltas applied
+        """
         normalized_adapters_q = []
         normalized_adapters_v = []
         task_indices = []
 
-        # Load all non-pruned tasks (only those that have been saved)
-        # Note: self.task_id is incremented after saving, so it represents the next task to train
-        # For evaluation, we only use tasks 0 to task_id-1 (completed tasks)
+        # CRITICAL: Only loads COMPLETED tasks (0 to task_id-1)
+        # task_id represents the NEXT task to train, not the current completed task
+        # Example: After training task 9, task_id=10, so we load tasks 0-9
         for i in range(self.task_id):
-            # Skip pruned tasks
+            # PRUNING CHECK 1: Skip pruned adapters (mask=0 means pruned)
             if self.gumbel_gate.pruning_mask[i] == 0:
                 continue
 
-            # Skip if adapter not saved yet (e.g., current task during training)
+            # PRUNING CHECK 2: Skip if adapter not saved yet
             if 'saved_A_' + str(i) not in self.saved_A or 'saved_B_' + str(i) not in self.saved_B:
                 continue
 
@@ -336,7 +355,13 @@ class _LoRA_qkv_timm_eval(nn.Module):
             normalized_adapters_q.append(norm_q)
             normalized_adapters_v.append(norm_v)
 
-        # Apply gating (no Gumbel noise, low temp)
+        # VERIFICATION: Ensure only non-pruned adapters are included
+        # task_indices should only contain tasks where pruning_mask[i] == 1
+        if len(task_indices) > 0:
+            assert all(self.gumbel_gate.pruning_mask[i] == 1 for i in task_indices), \
+                f"Evaluation should only use non-pruned adapters! Found pruned tasks in: {task_indices}"
+        
+        # Apply gating: NO Gumbel noise (training=False), fixed tau=0.5, deterministic
         if len(normalized_adapters_q) > 0:
             delta_q, _ = self.gumbel_gate(
                 normalized_adapters_q, task_indices, tau=0.5, training=False
@@ -383,12 +408,19 @@ class GumbelGate(nn.Module):
             nn.Parameter(torch.tensor(init_logit)) for _ in range(max_tasks)
         ])
 
-        # Pruning mask: 1 = keep, 0 = pruned (permanent)
+        # Pruning mask: 1 = keep, 0 = pruned (PERMANENT decision)
+        # Once an adapter is pruned (mask=0), it stays pruned for all future tasks
+        # This enables sublinear parameter growth: O(k) where k < t (total tasks)
         self.register_buffer('pruning_mask', torch.ones(max_tasks))
         self.max_tasks = max_tasks
 
     def load_parameters(self, alphas_list, logits_list, mask):
-        """Load trained alphas, logits and mask."""
+        """
+        Load trained parameters from a previous task.
+        
+        This is called during initialization of a new task to restore
+        the learned α, l, and pruning mask from the previous task.
+        """
         for i, val in enumerate(alphas_list):
             if i < self.max_tasks:
                 self.alpha[i].data.copy_(val.to(self.alpha[i].device))
@@ -689,6 +721,11 @@ class LoRA_ViT_timm(nn.Module):
     
     def forward(self, x: Tensor, loss= False, eval=False) -> Tensor:
         if eval:
+            # EVALUATION MODE: Reinitialize with eval layers
+            # This creates _LoRA_qkv_timm_eval layers that:
+            # 1. Only load completed tasks (0 to task_id-1)
+            # 2. Skip pruned adapters based on pruning_mask
+            # 3. Use deterministic gating (no Gumbel noise)
             self.reset(eval=True)
             return self.lora_vit(x)
         elif loss:

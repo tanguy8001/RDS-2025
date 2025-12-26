@@ -301,10 +301,16 @@ class IncrementalNet(BaseNet):
 
     def forward(self, x, ortho_loss=False, eval=False):
         if eval:
+            # EVALUATION PATH: Uses eval layers (_LoRA_qkv_timm_eval)
+            # - Only loads completed tasks (0 to task_id-1)
+            # - Skips pruned adapters (pruning_mask[i] == 0)
+            # - No Gumbel noise, deterministic gating
+            # - Returns logits from backbone's lora_vit.head (not self.fc)
             out = self.backbone(x, eval=True)
             out.update({"features": x})
             return out
         else:
+            # TRAINING PATH: Uses training layers (_LoRA_qkv_timm_train)
             if self.model_type == 'cnn':
                 x = self.backbone(x)
                 out = self.fc(x["features"])
